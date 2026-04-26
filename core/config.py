@@ -4,7 +4,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BOT_TOKEN      = os.getenv("BOT_TOKEN", "8631656745:AAEYLy5GMFc-PlJWQdiLrCHS3rNyepuoE2A")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+if not BOT_TOKEN:
+    raise RuntimeError("BOT_TOKEN Railway Variables ichida yo‘q")
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "english2024")
 
