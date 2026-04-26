@@ -141,6 +141,10 @@ async def text_msg(update: Update, context):
         elif context.user_data.get("waiting_login_user"):
             from bot.handlers.admin.auth import process_username
             await process_username(update, context)
+            elif context.user_data.get("waiting_new_lesson"):
+              context.user_data.pop("waiting_new_lesson", None)
+             from bot.handlers.admin.lessons import new_lesson_save
+             await new_lesson_save(update, context)
         elif context.user_data.get("rename_lid"):
             from bot.handlers.admin.lessons import rename_lesson
             await rename_lesson(update, context)
