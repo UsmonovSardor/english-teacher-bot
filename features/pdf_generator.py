@@ -7,7 +7,7 @@ from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 
 _HERE     = os.path.dirname(os.path.abspath(__file__))
-FONT_DIR  = os.path.join(_HERE, "fonts")
+FONT_DIR  = os.path.join(os.path.dirname(_HERE), "fonts")
 FONT_REG  = os.path.join(FONT_DIR, "DejaVuSans.ttf")
 FONT_BOLD = os.path.join(FONT_DIR, "DejaVuSans-Bold.ttf")
 FONT_ITAL = os.path.join(FONT_DIR, "DejaVuSans-Oblique.ttf")
