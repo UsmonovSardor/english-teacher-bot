@@ -1,52 +1,67 @@
-"""Lingua Bot — Minimal working version."""
-import logging
+"""Lingua Bot — absolute minimal debug version."""
+import logging, sys
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 from core.config import BOT_TOKEN
 from core import database as db
 
+# Force stdout logging
 logging.basicConfig(
-    format="%(asctime)s | %(levelname)s | %(message)s",
-    level=logging.INFO,
-    handlers=[logging.StreamHandler()]
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    level=logging.DEBUG,
+    stream=sys.stdout,
+    force=True
 )
 logger = logging.getLogger(__name__)
 
 
 async def cmd_start(update: Update, context):
-    logger.info(">>> /start received from user %s", update.effective_user.id)
+    print(f"PRINT: /start from {update.effective_user.id}", flush=True)
+    logger.warning("!!! /start received from user_id=%s", update.effective_user.id)
+    u = update.effective_user
+    try:
+        db.upsert_student(u.id, u.username or "", f"{u.first_name or ''} {u.last_name or ''}".strip())
+    except Exception as e:
+        logger.error("DB error: %s", e)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("👨‍💼 Admin Panel",  callback_data="admin"),
          InlineKeyboardButton("📚 Student Zone", callback_data="student")],
     ])
-    u = update.effective_user
-    db.upsert_student(u.id, u.username or "", f"{u.first_name or ''} {u.last_name or ''}".strip())
     await update.message.reply_text(
         f"👋 *Hello, {u.first_name}!*\n\n"
         "Welcome to *Lingua Bot* 🎓\nChoose your role:",
         parse_mode="Markdown", reply_markup=kb)
-    logger.info(">>> /start reply sent successfully")
+    print(f"PRINT: reply sent to {u.id}", flush=True)
+
+
+async def any_message(update: Update, context):
+    print(f"PRINT: ANY_MESSAGE type={update.effective_message.text if update.effective_message else '?'}", flush=True)
+    logger.warning("!!! ANY_MESSAGE received")
+    # Don't process commands here
+    if update.message and update.message.text and update.message.text.startswith('/'):
+        return
 
 
 async def callback_route(update: Update, context):
     data = update.callback_query.data
-    logger.info(">>> Callback: %s", data)
+    print(f"PRINT: callback data={data}", flush=True)
+    logger.warning("!!! CALLBACK: %s", data)
     try:
         if data == "student":
-            from bot.handlers.student import show_lessons
+            from bot.handlers.student.browse import show_lessons
             await show_lessons(update, context)
         elif data == "admin":
             from bot.handlers.admin.auth import admin_entry_direct
             await admin_entry_direct(update, context)
         elif data.startswith("sl_"):
-            from bot.handlers.student import show_lesson
+            from bot.handlers.student.browse import show_lesson
             await show_lesson(update, context, int(data[3:]))
         elif data.startswith("sc_"):
             parts = data[3:].split("_", 1)
-            from bot.handlers.student import show_category
+            from bot.handlers.student.content import show_category
             await show_category(update, context, int(parts[0]), parts[1])
         elif data.startswith(("gstart_","gv_","gm_","gs_","glb_","ga_","gq_")):
-            from bot.handlers.student import handle_game
+            from bot.handlers.student.content import handle_game
             await handle_game(update, context, data)
         elif data == "a_main":
             from bot.handlers.admin.lessons import _show_main
@@ -110,14 +125,15 @@ async def callback_route(update: Update, context):
         else:
             await update.callback_query.answer()
     except Exception as e:
-        logger.exception("Callback error for '%s': %s", data, e)
-        try:
-            await update.callback_query.answer("⚠️ Error. Try again.")
+        logger.exception("Callback error '%s': %s", data, e)
+        try: await update.callback_query.answer("⚠️ Error. Try again.")
         except: pass
 
 
 async def text_msg(update: Update, context):
-    logger.info(">>> Text msg from %s: %s", update.effective_user.id, update.message.text[:30])
+    if not update.message or not update.message.text:
+        return
+    print(f"PRINT: text_msg '{update.message.text[:30]}'", flush=True)
     try:
         if context.user_data.get("waiting_login_pass"):
             from bot.handlers.admin.auth import process_password
@@ -132,7 +148,7 @@ async def text_msg(update: Update, context):
             from bot.handlers.admin.content import save_content
             await save_content(update, context)
     except Exception as e:
-        logger.exception("Text handler error: %s", e)
+        logger.exception("text_msg error: %s", e)
 
 
 async def doc_msg(update: Update, context):
@@ -142,30 +158,50 @@ async def doc_msg(update: Update, context):
 
 
 async def error_handler(update: object, context) -> None:
-    logger.error("PTB Error: %s", context.error, exc_info=context.error)
+    logger.error("PTB Error:", exc_info=context.error)
 
 
 async def post_init(app):
-    from telegram import BotCommand, MenuButtonCommands
-    cmds = [
-        BotCommand("start",   "Welcome"),
-        BotCommand("help",    "Help"),
-    ]
-    await app.bot.set_my_commands(cmds)
+    print("PRINT: post_init called", flush=True)
+    # Check webhook status
     try:
+        info = await app.bot.get_webhook_info()
+        print(f"PRINT: webhook_url='{info.url}' pending={info.pending_update_count}", flush=True)
+        logger.warning("!!! WEBHOOK INFO: url='%s' pending=%s", info.url, info.pending_update_count)
+        if info.url:
+            logger.warning("!!! WEBHOOK IS SET — DELETING IT NOW")
+            await app.bot.delete_webhook(drop_pending_updates=True)
+    except Exception as e:
+        logger.error("Webhook check error: %s", e)
+
+    # Get bot info
+    try:
+        me = await app.bot.get_me()
+        print(f"PRINT: bot username=@{me.username} id={me.id}", flush=True)
+        logger.warning("!!! BOT: @%s (id=%s)", me.username, me.id)
+    except Exception as e:
+        logger.error("get_me error: %s", e)
+
+    db.init_db()
+    print("PRINT: DB initialized", flush=True)
+
+    from telegram import BotCommand, MenuButtonCommands
+    try:
+        await app.bot.set_my_commands([
+            BotCommand("start", "Welcome"),
+            BotCommand("help",  "Help"),
+        ])
         await app.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
     except Exception as e:
-        logger.warning("Menu button: %s", e)
-    logger.info("✅ Bot ready.")
+        logger.warning("Commands/menu error: %s", e)
+    print("PRINT: post_init DONE", flush=True)
 
 
 def build():
-    db.init_db()
     app = (Application.builder()
            .token(BOT_TOKEN)
            .post_init(post_init)
            .build())
-
     app.add_error_handler(error_handler)
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help",  cmd_start))
@@ -176,7 +212,8 @@ def build():
 
 
 if __name__ == "__main__":
-    logger.info("🚀 Lingua Bot starting…")
+    print("PRINT: Starting bot...", flush=True)
+    logger.warning("!!! Lingua Bot starting - DIAGNOSTIC MODE")
     build().run_polling(
         allowed_updates=Update.ALL_TYPES,
         drop_pending_updates=True
