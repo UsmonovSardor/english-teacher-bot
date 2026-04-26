@@ -87,6 +87,7 @@ async def new_lesson_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.edit_message_text(
         "📝 *New Lesson*\n\nEnter the lesson title:",
         parse_mode=ParseMode.MARKDOWN)
+    context.user_data["waiting_new_lesson"] = True
     return State.ADD_LESSON
 
 
