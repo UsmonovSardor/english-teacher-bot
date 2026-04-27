@@ -8,7 +8,6 @@ from core.config import CATEGORY_KEYWORDS
 
 logger = logging.getLogger(__name__)
 
-# Explicit section boundary patterns — ORDER MATTERS
 SECTION_PATTERNS = {
     "test_quiz":  re.compile(
         r"(answer\s*key|reading\s*answer[s]?|listening\s*answer[s]?|"
@@ -52,7 +51,7 @@ def _classify_heading(text: str) -> str | None:
         pat = SECTION_PATTERNS.get(cat)
         if pat and pat.search(t):
             return cat
-        kws = CATEGORY_KEYWORds.get(cat, [])
+        kws = CATEGORY_KEYWORDS.get(cat, [])
         if any(kw.lower() in t for kw in kws):
             return cat
     return None
@@ -97,6 +96,7 @@ def parse_document(path: str) -> tuple[dict, str]:
 
     flush()
     result = {k: v for k, v in result.items() if v}
+
     links = []
     for blocks in result.values():
         for block in blocks:
@@ -105,5 +105,6 @@ def parse_document(path: str) -> tuple[dict, str]:
                     links.append(word.strip(".,;()"))
     if links:
         result["links"] = result.get("links", []) + links
+
     logger.info("Parsed '%s': categories=%s", lesson_title, list(result.keys()))
     return result, lesson_title or "Lesson"
