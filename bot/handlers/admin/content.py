@@ -4,7 +4,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 from telegram.constants import ParseMode
 from core import database as db
 from core.config import State, CATEGORIES
-from bot.keyboards import admin_cats, admin_cat_actions, admin_content_item, admin_lesson, confirm
+from bot.keyboards import admin_cats, admin_cat_actions, admin_content_item, admin_lesson, admin_main, confirm
 
 CAT_LABEL = {key: lbl for lbl, key in CATEGORIES}
 
@@ -12,6 +12,9 @@ CAT_LABEL = {key: lbl for lbl, key in CATEGORIES}
 async def show_cats(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: int):
     await update.callback_query.answer()
     lesson = db.get_lesson(lid)
+    if not lesson:
+        await update.callback_query.answer("Lesson not found.", show_alert=True)
+        return
     await update.callback_query.edit_message_text(
         f"📋 *Edit Content — {lesson['title']}*\n\nChoose a category:",
         parse_mode=ParseMode.MARKDOWN, reply_markup=admin_cats(lid))
@@ -45,14 +48,15 @@ async def add_content_start(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
 
 async def save_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Edit existing
     cid = context.user_data.pop("edit_cid", None)
     if cid:
         row = db.get_content(cid)
+        if not row:
+            await update.message.reply_text("⚠️ Content not found.")
+            return ConversationHandler.END
         db.update_content(cid, update.message.text.strip())
         await update.message.reply_text("✅ Updated!", reply_markup=admin_lesson(row["lesson_id"]))
         return ConversationHandler.END
-    # Add new
     info = context.user_data.pop("add_content", None)
     if info:
         db.add_content(info["lid"], info["cat"], update.message.text.strip())
@@ -60,7 +64,7 @@ async def save_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"✅ Added to *{lbl}*!", parse_mode=ParseMode.MARKDOWN,
             reply_markup=admin_cat_actions(info["lid"], info["cat"]))
-    return ConversationHandler.END
+        return ConversationHandler.END
 
 
 async def clear_cat(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: int, cat: str):
@@ -95,6 +99,9 @@ async def edit_item_start(update: Update, context: ContextTypes.DEFAULT_TYPE, ci
 async def delete_lesson_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: int):
     await update.callback_query.answer()
     lesson = db.get_lesson(lid)
+    if not lesson:
+        await update.callback_query.answer("Lesson not found.", show_alert=True)
+        return
     await update.callback_query.edit_message_text(
         f"⚠️ Delete *'{lesson['title']}'*?\n\nThis removes ALL content permanently!",
         parse_mode=ParseMode.MARKDOWN,
@@ -104,4 +111,5 @@ async def delete_lesson_confirm(update: Update, context: ContextTypes.DEFAULT_TY
 async def delete_lesson_exec(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: int):
     db.delete_lesson(lid)
     await update.callback_query.answer("Deleted!")
-    await update.callback_query.edit_message_text("🗑 Lesson deleted.", reply_markup=admin_lesson.__module__ and __import__('bot.keyboards', fromlist=['admin_main']).admin_main())
+    await update.callback_query.edit_message_text(
+        "🗑 Lesson deleted.", reply_markup=admin_main())
