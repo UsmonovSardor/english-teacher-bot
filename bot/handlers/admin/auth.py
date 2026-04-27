@@ -1,9 +1,12 @@
 """Admin authentication — no ConversationHandler, uses user_data state."""
+import logging
 from telegram import Update
 from telegram.constants import ParseMode
 from core import database as db
 from core.config import ADMIN_USERNAME, ADMIN_PASSWORD
 from bot.keyboards import admin_main
+
+logger = logging.getLogger(__name__)
 
 
 async def admin_entry_direct(update: Update, context):
@@ -13,6 +16,11 @@ async def admin_entry_direct(update: Update, context):
         from bot.handlers.admin.lessons import _show_main
         await _show_main(update, context)
         return
+    # Clear any stale login state
+    context.user_data.pop("waiting_login_user", None)
+    context.user_data.pop("waiting_login_pass", None)
+    context.user_data.pop("_uname", None)
+
     await update.callback_query.edit_message_text(
         "🔐 *Admin Login*\n\nEnter your *username*:",
         parse_mode=ParseMode.MARKDOWN)
@@ -29,9 +37,11 @@ async def process_username(update: Update, context):
 async def process_password(update: Update, context):
     context.user_data.pop("waiting_login_pass", None)
     uname = context.user_data.pop("_uname", "")
-    pwd   = update.message.text.strip()
-    try: await update.message.delete()
-    except: pass
+    pwd = update.message.text.strip()
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
 
     if uname == ADMIN_USERNAME and pwd == ADMIN_PASSWORD:
         db.set_admin(update.effective_chat.id, True)
@@ -41,8 +51,12 @@ async def process_password(update: Update, context):
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=admin_main())
     else:
+        logger.warning("Failed admin login attempt: username='%s'", uname)
+        # Allow retry without /start
+        context.user_data["waiting_login_user"] = True
         await update.effective_chat.send_message(
-            "❌ Wrong credentials.\n\nUse /start to try again.")
+            "❌ *Wrong credentials.*\n\nPlease enter your *username* again:",
+            parse_mode=ParseMode.MARKDOWN)
 
 
 async def admin_logout(update: Update, context):
