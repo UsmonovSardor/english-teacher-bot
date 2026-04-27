@@ -16,7 +16,7 @@ CAT_LABEL = {key: lbl for lbl, key in CATEGORIES}
 async def _show_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cnt = db.student_count()
     text = (f"👨‍💼 *Admin Panel — Lingua Bot*\n\n"
-            f"👥 Students: *{cnt}*\n\n"
+            f"💥 Students: *{cnt}*\n\n"
             f"Choose an action:")
     if update.callback_query:
         await update.callback_query.answer()
@@ -62,13 +62,13 @@ async def show_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: i
     scores = db.lesson_leaderboard(lid, 3)
     lb_txt = ""
     if scores:
-        MEDALS = ["🥇", "🥈", "🥉"]
+        MEDALS = ["U0001F947", "U0001F948", "U0001F949"]
         lb_txt = "\n\n🏆 *Top scores:*\n"
         for i, r in enumerate(scores):
             name = r["full_name"] or r["username"] or "Student"
-            lb_txt += f" {MEDAE�Q}i]} {name[:18]} — {r['pct']}%\n"
+            lb_txt += f" {MEDALS[i]} {name[:18]} — {r['pct']}%\n"
     await update.callback_query.edit_message_text(
-        f"{lesson['emoji]} *{lesson['title']}*\n"
+        f"{lesson['emoji']} *{lesson['title']}*\n"
         f"📌 {lesson['topic'] or 'No topic set'}\n"
         f"📅 {lesson['created_at'][:10]}\n"
         f"Status: {has}{lb_txt}",
@@ -79,7 +79,7 @@ async def show_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: i
 async def new_lesson_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(
-        "📝 *New Lesson*1\n\nEnter the lesson title:",
+        "📝 *New Lesson*\n\nEnter the lesson title:",
         parse_mode=ParseMode.MARKDOWN)
     context.user_data["waiting_new_lesson"] = True
     return State.ADD_LESSON
@@ -118,7 +118,7 @@ async def receive_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not doc or not doc.file_name.lower().endswith(".docx"):
         await update.message.reply_text("⚠️ Please send a *.docx* file.", parse_mode=ParseMode.MARKDOWN)
         return
-    msg = await update.message.reply_text("⏳ Parsing document…")
+    msg = await update.message.reply_text("⏳ Parsing document...")
     tmp = None
     try:
         f = await context.bot.get_file(doc.file_id)
