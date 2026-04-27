@@ -22,9 +22,11 @@ def _register(u):
         db.upsert_student(u.id, u.username or "", name)
 
 def _lesson_text(lesson, cats):
+    # sqlite3.Row → dict for safe .get() usage
+    lesson = dict(lesson)
     topic = lesson.get("topic") or ""
     badges = [v for k, v in _BADGES.items() if k in cats]
-    badges += ["🎮 Games", "🔗 Resources"]  # always
+    badges += ["🎮 Games", "🔗 Resources"]
     line = "  •  ".join(badges[:5])
     return (
         f"{lesson['emoji']} *{lesson['title']}*\n"
@@ -69,7 +71,6 @@ async def show_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: i
     text = _lesson_text(lesson, cats)
     kb   = student_cats(lid, cats)
 
-    # Try edit; if message is a document/media → delete & resend
     try:
         await update.callback_query.edit_message_text(
             text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
