@@ -16,7 +16,7 @@ CAT_LABEL = {key: lbl for lbl, key in CATEGORIES}
 async def _show_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cnt = db.student_count()
     text = (f"👨‍💼 *Admin Panel — Lingua Bot*\n\n"
-            f"💥 Students: *{cnt}*\n\n"
+            f"👥 Students: *{cnt}*\n\n"
             f"Choose an action:")
     if update.callback_query:
         await update.callback_query.answer()
@@ -37,8 +37,7 @@ async def show_lessons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not lessons:
         await update.callback_query.edit_message_text(
             "📂 No lessons yet.\n\nTap *➕ New Lesson* to create one.",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=admin_main())
+            parse_mode=ParseMode.MARKDOWN, reply_markup=admin_main())
         return
     lesson_list = []
     for l in lessons:
@@ -47,8 +46,7 @@ async def show_lessons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lesson_list.append(d)
     await update.callback_query.edit_message_text(
         f"📂 *Lessons* ({len(lessons)})\n\nSelect a lesson to manage:",
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=admin_lessons(lesson_list))
+        parse_mode=ParseMode.MARKDOWN, reply_markup=admin_lessons(lesson_list))
 
 
 async def show_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: int):
@@ -62,7 +60,7 @@ async def show_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: i
     scores = db.lesson_leaderboard(lid, 3)
     lb_txt = ""
     if scores:
-        MEDALS = ["U0001F947", "U0001F948", "U0001F949"]
+        MEDALS = ["🥇", "🥈", "🥉"]
         lb_txt = "\n\n🏆 *Top scores:*\n"
         for i, r in enumerate(scores):
             name = r["full_name"] or r["username"] or "Student"
@@ -72,8 +70,7 @@ async def show_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: i
         f"📌 {lesson['topic'] or 'No topic set'}\n"
         f"📅 {lesson['created_at'][:10]}\n"
         f"Status: {has}{lb_txt}",
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=admin_lesson(lid))
+        parse_mode=ParseMode.MARKDOWN, reply_markup=admin_lesson(lid))
 
 
 async def new_lesson_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -93,8 +90,7 @@ async def new_lesson_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lid = db.create_lesson(title)
     await update.message.reply_text(
         f"✅ Lesson *{title}* created!\n\nWhat would you like to do?",
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=admin_lesson(lid))
+        parse_mode=ParseMode.MARKDOWN, reply_markup=admin_lesson(lid))
     return ConversationHandler.END
 
 
@@ -161,6 +157,5 @@ async def rename_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db.update_lesson(lid, new_title, lesson["topic"] or "", lesson["emoji"] or "📘")
     await update.message.reply_text(
         f"✅ Renamed to *{new_title}*",
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=admin_lesson(lid))
+        parse_mode=ParseMode.MARKDOWN, reply_markup=admin_lesson(lid))
     return ConversationHandler.END
