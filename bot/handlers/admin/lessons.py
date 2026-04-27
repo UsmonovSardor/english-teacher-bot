@@ -66,9 +66,9 @@ async def show_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: i
         lb_txt = "\n\n🏆 *Top scores:*\n"
         for i, r in enumerate(scores):
             name = r["full_name"] or r["username"] or "Student"
-            lb_txt += f" {MEDALS[i]} {name[:18]} — {r['pct']}%\n"
+            lb_txt += f" {MEDAE�Q}i]} {name[:18]} — {r['pct']}%\n"
     await update.callback_query.edit_message_text(
-        f"{lesson['emoji']} *{lesson['title']}*\n"
+        f"{lesson['emoji]} *{lesson['title']}*\n"
         f"📌 {lesson['topic'] or 'No topic set'}\n"
         f"📅 {lesson['created_at'][:10]}\n"
         f"Status: {has}{lb_txt}",
@@ -77,10 +77,9 @@ async def show_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: i
 
 
 async def new_lesson_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Admin check is done in main.py callback_route
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(
-        "📝 *New Lesson*\n\nEnter the lesson title:",
+        "📝 *New Lesson*1\n\nEnter the lesson title:",
         parse_mode=ParseMode.MARKDOWN)
     context.user_data["waiting_new_lesson"] = True
     return State.ADD_LESSON
@@ -106,7 +105,7 @@ async def upload_start(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: 
         "📤 *Upload Document*\n\n"
         "Send a *.docx* file — I'll auto-parse it into:\n"
         "_Links • Visuals • Vocabulary • Speaking • Listening •\n"
-        "Writing • Games • Homework • Test & Quiz_\n\n"
+        "Reading • Writing • Games • Homework • Test & Quiz_\n\n"
         "⚡ You can upload multiple files — content will be appended.",
         parse_mode=ParseMode.MARKDOWN)
 
