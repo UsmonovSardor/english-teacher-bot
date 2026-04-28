@@ -28,7 +28,7 @@ def _lesson_text(lesson, cats):
     return (
         f"{lesson['emoji']} *{lesson['title']}*\n"
         + (f"📌 _{topic}_\n" if topic else "")
-        + f"\n{line}\n\nBo'limni tanlang:"
+        + f"\n{line}\n\nChoose a section:"
     )
 
 
@@ -52,14 +52,14 @@ async def show_lessons(update, context):
         await update.callback_query.answer()
 
     if not lessons:
-        text = f"📚 *Lingua Bot*\n\nSalom, *{name}*!\n\nHozircha darslar yo'q."
+        text = f"📚 *Lingua Bot*\n\nHello, *{name}*!\n\nThere are no lessons yet."
         kb = None
     else:
-        text = f"📚 *Lingua Bot*\n\nSalom, *{name}*! Darsni tanlang:"
+        text = f"📚 *Lingua Bot*\n\nHello, *{name}*! Please choose a lesson:"
         kb = student_lessons(lessons)
         kb = InlineKeyboardMarkup(
             list(kb.inline_keyboard) + [
-                [InlineKeyboardButton("👤 Mening profilim", callback_data="my_profile")]
+                [InlineKeyboardButton("👤 My Profile", callback_data="my_profile")]
             ]
         )
 
@@ -93,7 +93,7 @@ async def show_lesson(update, context, lid):
 
     lesson = db.get_lesson(lid)
     if not lesson:
-        await update.callback_query.answer("Dars topilmadi.", show_alert=True)
+        await update.callback_query.answer("Lesson not found.", show_alert=True)
         return
 
     db.log(update.effective_user.id, lid, action="view")
