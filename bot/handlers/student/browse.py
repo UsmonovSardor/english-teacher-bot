@@ -30,9 +30,13 @@ async def show_lessons(update, context):
         text = f"📚 *Lingua Bot*\n\nSalom, *{name}*!\n\nHozircha darslar yo'q."
         kb   = None
     else:
-        text = f"📚 *Lingua Bot*\n\nSalom, *{name}*! Darsni tanlang:"
-        kb   = student_lessons(lessons)
-        kb.inline_keyboard.append([InlineKeyboardButton("👤 Mening profilim", callback_data="my_profile")])
+    text = f"📚 *Lingua Bot*\n\nSalom, *{name}*! Darsni tanlang:"
+    kb = student_lessons(lessons)
+    kb = InlineKeyboardMarkup(
+        list(kb.inline_keyboard) + [
+            [InlineKeyboardButton("👤 Mening profilim", callback_data="my_profile")]
+        ]
+    )
     try:
         if update.callback_query:
             await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
