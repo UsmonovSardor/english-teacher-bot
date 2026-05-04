@@ -1,6 +1,5 @@
 """
 Document parser — converts .docx and .pdf files to structured category blocks.
-Improved: detects category titles even when they are not real headings.
 """
 import os
 import re
@@ -13,33 +12,27 @@ logger = logging.getLogger(__name__)
 
 SECTION_PATTERNS = {
     "test_quiz": re.compile(
-        r"^(answer\s*key|answers?|reading\s*answers?|listening\s*answers?|"
-        r"test|quiz|exam|task\s*\d+\s*[-–]\s*key)\b",
+        r"^(answer\s*key|answers?|reading\s*answer\s*sheet|listening\s*answer\s*sheet|test|quiz|exam)\b",
         re.I,
     ),
     "listening": re.compile(
-        r"^(listening|listening\s*task|listening\s*activity|audio|track|"
-        r"recording|listen\s+and|listen\s+to)\b",
-        re.I,
-    ),
-    "reading": re.compile(
-        r"^(reading|reading\s*task|reading\s*passage|reading\s*text|"
-        r"read\s*the\s*text|read\s*the\s*following|read\s+and|"
-        r"comprehension|passage|article)\b",
+        r"^(part\s*4\.?\s*listening|listening|audio|track|recording|listen\s+and|listen\s+to)\b",
         re.I,
     ),
     "vocabulary": re.compile(
-        r"^(vocabulary|vocab|new\s*words|word\s*list|key\s*words|"
-        r"glossary|match\s*the\s*words|definitions|useful\s*words)\b",
+        r"^(part\s*2|words|definitions|vocabulary|vocab|new\s*words|word\s*list|key\s*words|glossary|useful\s*words)\b",
+        re.I,
+    ),
+    "reading": re.compile(
+        r"^(part\s*3|reading|reading\s*task|reading\s*passage|reading\s*text|read\s*the\s*text|data\s*processing\s*day)\b",
         re.I,
     ),
     "speaking": re.compile(
-        r"^(speaking|discussion|discuss|pair\s*work|group\s*work|"
-        r"role\s*play|debate|presentation)\b",
+        r"^(part\s*1|speaking|discussion|discuss|pair\s*work|group\s*work|role\s*play|debate|presentation)\b",
         re.I,
     ),
     "writing": re.compile(
-        r"^(writing|writing\s*task|write|essay|paragraph|composition)\b",
+        r"^(writing|writing\s*task|write|essay|paragraph|composition|critical\s*thinking)\b",
         re.I,
     ),
     "homework": re.compile(
@@ -63,12 +56,10 @@ SECTION_PATTERNS = {
 
 def _table_to_text(table) -> str:
     rows = []
-
     for row in table.rows:
         cells = [c.text.strip() for c in row.cells if c.text.strip()]
         if cells:
             rows.append(" | ".join(cells))
-
     return "\n".join(rows)
 
 
@@ -81,20 +72,18 @@ def _clean_title(text: str) -> str:
 
 def _classify_section_title(text: str) -> str | None:
     title = _clean_title(text)
-
     if not title:
         return None
 
     low = title.lower().strip()
-
-    if len(low) > 120:
+    if len(low) > 160:
         return None
 
     priority = [
         "test_quiz",
         "listening",
-        "reading",
         "vocabulary",
+        "reading",
         "speaking",
         "writing",
         "homework",
@@ -109,8 +98,7 @@ def _classify_section_title(text: str) -> str | None:
             return cat
 
     for cat in priority:
-        keywords = CATEGORY_KEYWORDS.get(cat, [])
-        for kw in keywords:
+        for kw in CATEGORY_KEYWORDS.get(cat, []):
             kw_low = kw.lower().strip()
             if low == kw_low or low.startswith(kw_low + ":"):
                 return cat
@@ -120,22 +108,21 @@ def _classify_section_title(text: str) -> str | None:
 
 def _looks_like_heading_line(text: str) -> bool:
     clean = _clean_title(text)
-
     if not clean:
-        return False
-
-    if len(clean) > 120:
         return False
 
     if _classify_section_title(clean):
         return True
 
+    if len(clean) > 120:
+        return False
+
     words = clean.split()
 
-    if len(words) <= 7 and clean.endswith(":"):
+    if len(words) <= 8 and clean.endswith(":"):
         return True
 
-    if len(words) <= 6 and clean.isupper():
+    if len(words) <= 7 and clean.isupper():
         return True
 
     return False
@@ -143,7 +130,6 @@ def _looks_like_heading_line(text: str) -> bool:
 
 def _is_heading(para) -> bool:
     text = para.text.strip()
-
     if not text:
         return False
 
@@ -162,7 +148,6 @@ def _is_heading(para) -> bool:
 
 def _extract_docx_blocks(path: str) -> tuple[list[tuple[str, str]], str]:
     doc = Document(path)
-
     items: list[tuple[str, str]] = []
     lesson_title = ""
 
@@ -185,82 +170,67 @@ def _extract_docx_blocks(path: str) -> tuple[list[tuple[str, str]], str]:
         if not text:
             continue
 
-        if not lesson_title and _is_heading(para) and not _classify_section_title(text):
+        detected = _classify_section_title(text)
+
+        if not lesson_title and not detected and "lesson" in text.lower():
             lesson_title = _clean_title(text)
             continue
 
-        items.append(("heading" if _is_heading(para) else "text", text))
+        kind = "heading" if _is_heading(para) or detected else "text"
+        items.append((kind, text))
 
     return items, lesson_title
 
 
 def _extract_pdf_blocks(path: str) -> tuple[list[tuple[str, str]], str]:
-    """
-    PDF parser.
-    Uses pdfplumber if installed.
-    Falls back to pypdf/PyPDF2 if pdfplumber is not available.
-    """
     text = ""
 
     try:
         import pdfplumber
-
         pages = []
         with pdfplumber.open(path) as pdf:
             for page in pdf.pages:
                 page_text = page.extract_text() or ""
                 if page_text.strip():
                     pages.append(page_text)
-
         text = "\n".join(pages)
 
     except Exception:
         try:
             from pypdf import PdfReader
         except Exception:
-            try:
-                from PyPDF2 import PdfReader
-            except Exception as e:
-                raise RuntimeError(
-                    "PDF support requires pdfplumber or pypdf. "
-                    "Install one of them: pip install pdfplumber"
-                ) from e
+            from PyPDF2 import PdfReader
 
         reader = PdfReader(path)
         pages = []
-
         for page in reader.pages:
             page_text = page.extract_text() or ""
             if page_text.strip():
                 pages.append(page_text)
-
         text = "\n".join(pages)
 
     lines = []
     for raw in text.splitlines():
-        line = raw.strip()
-        if not line:
-            continue
-        line = re.sub(r"\s+", " ", line)
-        lines.append(line)
+        line = re.sub(r"\s+", " ", raw.strip())
+        if line:
+            lines.append(line)
 
     items: list[tuple[str, str]] = []
     lesson_title = ""
 
     for line in lines:
-        if not lesson_title and len(line) <= 100 and not _classify_section_title(line):
+        detected = _classify_section_title(line)
+
+        if not lesson_title and not detected and "lesson" in line.lower() and len(line) <= 120:
             lesson_title = _clean_title(line)
 
-        kind = "heading" if _looks_like_heading_line(line) else "text"
+        kind = "heading" if detected or _looks_like_heading_line(line) else "text"
         items.append((kind, line))
 
     return items, lesson_title
 
 
-def _split_items_to_categories(
-    items: list[tuple[str, str]],
-    lesson_title: str,
-) -> tuple[dict, str]:
+def _split_items_to_categories(items: list[tuple[str, str]], lesson_title: str) -> tuple[dict, str]:
     result: dict[str, list[str]] = {cat: [] for cat in CATEGORY_KEYWORDS}
 
     current_cat = None
@@ -268,12 +238,9 @@ def _split_items_to_categories(
 
     def flush():
         nonlocal buffer
-
         text = "\n".join(buffer).strip()
-
         if text and current_cat:
             result[current_cat].append(text)
-
         buffer = []
 
     for kind, text in items:
@@ -287,13 +254,10 @@ def _split_items_to_categories(
             continue
 
         if kind == "heading":
-            if not lesson_title:
-                lesson_title = clean
-                continue
-
             if current_cat:
                 buffer.append(f"**{clean}**")
-
+            elif not lesson_title:
+                lesson_title = clean[:80]
             continue
 
         if current_cat:
@@ -306,7 +270,6 @@ def _split_items_to_categories(
     result = {k: v for k, v in result.items() if v}
 
     links = []
-
     for blocks in result.values():
         for block in blocks:
             found = re.findall(r"https?://\S+|www\.\S+", block)
@@ -331,5 +294,4 @@ def parse_document(path: str) -> tuple[dict, str]:
     result, lesson_title = _split_items_to_categories(items, lesson_title)
 
     logger.info("Parsed '%s': categories=%s", lesson_title, list(result.keys()))
-
     return result, lesson_title
