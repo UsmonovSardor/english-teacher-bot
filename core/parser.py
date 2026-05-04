@@ -1,5 +1,6 @@
 """
 Document parser — converts .docx and .pdf files to structured category blocks.
+Strong section splitter for English lesson files.
 """
 import os
 import re
@@ -12,41 +13,57 @@ logger = logging.getLogger(__name__)
 
 SECTION_PATTERNS = {
     "test_quiz": re.compile(
-        r"^(answer\s*key|answers?|reading\s*answer\s*sheet|listening\s*answer\s*sheet|test|quiz|exam)\b",
+        r"^(answer\s*key|answers?|reading\s*answer\s*sheet|listening\s*answer\s*sheet|"
+        r"test|quiz|exam|true\s*/\s*false|multiple\s*choice|choose\s*the\s*correct)\b",
         re.I,
     ),
+
     "listening": re.compile(
-        r"^(part\s*4\.?\s*listening|listening|audio|track|recording|listen\s+and|listen\s+to)\b",
+        r"^(part\s*4\.?\s*listening|listening|listening\s*task|audio|track|recording|"
+        r"listen\s+and|listen\s+to|before\s*listening|after\s*listening|fact\s*hunt)\b",
         re.I,
     ),
+
     "vocabulary": re.compile(
-        r"^(part\s*2|words|definitions|vocabulary|vocab|new\s*words|word\s*list|key\s*words|glossary|useful\s*words)\b",
+        r"^(part\s*2|words|definitions|vocabulary|vocab|new\s*words|word\s*list|"
+        r"key\s*words|glossary|useful\s*words|match\s*the\s*words|word\s*bank)\b",
         re.I,
     ),
+
     "reading": re.compile(
-        r"^(part\s*3|reading|reading\s*task|reading\s*passage|reading\s*text|read\s*the\s*text|data\s*processing\s*day)\b",
+        r"^(part\s*3|reading|reading\s*task|reading\s*passage|reading\s*text|"
+        r"read\s*the\s*text|read\s*the\s*following|data\s*processing\s*day|article|passage)\b",
         re.I,
     ),
+
     "speaking": re.compile(
-        r"^(part\s*1|speaking|discussion|discuss|pair\s*work|group\s*work|role\s*play|debate|presentation)\b",
+        r"^(part\s*1|speaking|discussion|discuss|students\s*discuss|pair\s*work|"
+        r"group\s*work|role\s*play|debate|presentation|real-life\s*problem\s*solving|"
+        r"task\s*3\.?\s*real-life\s*problem\s*solving)\b",
         re.I,
     ),
+
     "writing": re.compile(
-        r"^(writing|writing\s*task|write|essay|paragraph|composition|critical\s*thinking)\b",
+        r"^(writing|writing\s*task|write|essay|paragraph|composition|"
+        r"critical\s*thinking|task\s*4\.?\s*critical\s*thinking)\b",
         re.I,
     ),
+
     "homework": re.compile(
         r"^(homework|home\s*task|assignment|at\s*home)\b",
         re.I,
     ),
+
     "games": re.compile(
-        r"^(game|games|puzzle|crossword|bingo|fun\s*activity)\b",
+        r"^(game|games|puzzle|crossword|bingo|fun\s*activity|scramble)\b",
         re.I,
     ),
+
     "visuals": re.compile(
         r"^(visuals?|image|picture|photo|diagram|chart|video|watch)\b",
         re.I,
     ),
+
     "links": re.compile(
         r"^(links?|url|website|www|https?://)\b",
         re.I,
@@ -65,9 +82,42 @@ def _table_to_text(table) -> str:
 
 def _clean_title(text: str) -> str:
     text = text.strip()
-    text = re.sub(r"^[#\-\*\•\d\.\)\s]+", "", text)
+    text = re.sub(r"^[#\-\*\•·\d\.\)\s]+", "", text)
     text = text.strip(":：-–— ").strip()
     return text
+
+
+def _smart_task_classifier(text: str) -> str | None:
+    low = _clean_title(text).lower().strip()
+
+    if not low:
+        return None
+
+    if "answer key" in low or "answer sheet" in low:
+        return "test_quiz"
+
+    if low.startswith("part 1"):
+        return "speaking"
+
+    if low.startswith("part 2") or low in {"words", "definitions"}:
+        return "vocabulary"
+
+    if low.startswith("part 3") or "data processing day" in low:
+        return "reading"
+
+    if low.startswith("part 4") or "listening" in low or low == "audio":
+        return "listening"
+
+    if "real-life problem solving" in low or "students discuss" in low:
+        return "speaking"
+
+    if "critical thinking" in low:
+        return "writing"
+
+    if "true / false" in low or "true/false" in low:
+        return "test_quiz"
+
+    return None
 
 
 def _classify_section_title(text: str) -> str | None:
@@ -76,8 +126,13 @@ def _classify_section_title(text: str) -> str | None:
         return None
 
     low = title.lower().strip()
-    if len(low) > 160:
+
+    if len(low) > 180:
         return None
+
+    smart = _smart_task_classifier(low)
+    if smart:
+        return smart
 
     priority = [
         "test_quiz",
@@ -119,10 +174,16 @@ def _looks_like_heading_line(text: str) -> bool:
 
     words = clean.split()
 
-    if len(words) <= 8 and clean.endswith(":"):
+    if len(words) <= 10 and clean.endswith(":"):
         return True
 
-    if len(words) <= 7 and clean.isupper():
+    if len(words) <= 8 and clean.isupper():
+        return True
+
+    if re.match(r"^task\s*\d+\.?", clean, re.I):
+        return True
+
+    if re.match(r"^part\s*\d+\.?", clean, re.I):
         return True
 
     return False
@@ -187,12 +248,14 @@ def _extract_pdf_blocks(path: str) -> tuple[list[tuple[str, str]], str]:
 
     try:
         import pdfplumber
+
         pages = []
         with pdfplumber.open(path) as pdf:
             for page in pdf.pages:
                 page_text = page.extract_text() or ""
                 if page_text.strip():
                     pages.append(page_text)
+
         text = "\n".join(pages)
 
     except Exception:
@@ -203,10 +266,12 @@ def _extract_pdf_blocks(path: str) -> tuple[list[tuple[str, str]], str]:
 
         reader = PdfReader(path)
         pages = []
+
         for page in reader.pages:
             page_text = page.extract_text() or ""
             if page_text.strip():
                 pages.append(page_text)
+
         text = "\n".join(pages)
 
     lines = []
@@ -230,7 +295,10 @@ def _extract_pdf_blocks(path: str) -> tuple[list[tuple[str, str]], str]:
     return items, lesson_title
 
 
-def _split_items_to_categories(items: list[tuple[str, str]], lesson_title: str) -> tuple[dict, str]:
+def _split_items_to_categories(
+    items: list[tuple[str, str]],
+    lesson_title: str,
+) -> tuple[dict, str]:
     result: dict[str, list[str]] = {cat: [] for cat in CATEGORY_KEYWORDS}
 
     current_cat = None
