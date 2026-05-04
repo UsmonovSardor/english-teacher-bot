@@ -10,8 +10,7 @@ logging.basicConfig(format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 logger = logging.getLogger(__name__)
 
 def _is_admin(update): return db.is_admin(update.effective_chat.id)
-async def _deny(update): await update.callback_query.answer("⛔ Ruxsat yo'q.", show_alert=True)
-
+async def _deny(update): await update.callback_query.answer("⛔ Access denied.", show_alert=True)
 async def cmd_start(update, context):
     u = update.effective_user
     try: db.upsert_student(u.id, u.username or "", f"{u.first_name or ''} {u.last_name or ''}".strip())
@@ -143,6 +142,10 @@ async def text_msg(update, context):
 async def doc_msg(update, context):
     if context.user_data.get("upload_lid"):
         from bot.handlers.admin.lessons import receive_doc; await receive_doc(update, context)
+        async def audio_msg(update, context):
+    if context.user_data.get("add_content"):
+        from bot.handlers.admin.content import save_audio_content
+        await save_audio_content(update, context)
 
 async def error_handler(update, context): logger.error("PTB:", exc_info=context.error)
 
@@ -165,6 +168,9 @@ def build():
     app.add_handler(CommandHandler("help", cmd_start))
     app.add_handler(CallbackQueryHandler(callback_route))
     app.add_handler(MessageHandler(filters.Document.ALL, doc_msg))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_msg))
+    app.add_handler(MessageHandler(filters.Document.ALL, doc_msg))
+    app.add_handler(MessageHandler(filters.AUDIO | filters.VOICE, audio_msg))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_msg))
     return app
 
