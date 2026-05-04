@@ -49,6 +49,7 @@ async def add_content_start(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
 async def save_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cid = context.user_data.pop("edit_cid", None)
+    f"➕ *Add to {CAT_LABEL.get(cat, cat)}*\n\nType/paste content or send an audio/voice file:",
     if cid:
         row = db.get_content(cid)
         if not row:
@@ -73,7 +74,33 @@ async def clear_cat(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: int
     await update.callback_query.edit_message_text(
         f"🗑 *{CAT_LABEL.get(cat, cat)}* cleared.",
         parse_mode=ParseMode.MARKDOWN, reply_markup=admin_cat_actions(lid, cat))
+async def save_audio_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    info = context.user_data.pop("add_content", None)
+    if not info:
+        return ConversationHandler.END
 
+    audio = update.message.audio
+    voice = update.message.voice
+
+    if not audio and not voice:
+        await update.message.reply_text("⚠️ Please send an audio or voice file.")
+        return ConversationHandler.END
+
+    if audio:
+        body = f"[AUDIO]{audio.file_id}"
+    else:
+        body = f"[VOICE]{voice.file_id}"
+
+    db.add_content(info["lid"], info["cat"], body)
+
+    lbl = CAT_LABEL.get(info["cat"], info["cat"])
+    await update.message.reply_text(
+        f"✅ Audio added to *{lbl}*!",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=admin_cat_actions(info["lid"], info["cat"])
+    )
+
+    return ConversationHandler.END
 
 async def del_item(update: Update, context: ContextTypes.DEFAULT_TYPE, cid: int):
     row = db.get_content(cid)
