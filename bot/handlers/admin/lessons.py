@@ -18,37 +18,64 @@ logger = logging.getLogger(__name__)
 CAT_LABEL = {key: lbl for lbl, key in CATEGORIES}
 
 
-async def _show_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    cnt = db.student_count()
-    text = (
-        f"👨‍💼 *Admin Panel — Lingua Bot*\n\n"
-        f"👥 Students: *{cnt}*\n\n"
-        f"Choose an action:"
-    )
+def _is_admin(update: Update) -> bool:
+    try:
+        return db.is_admin(update.effective_chat.id)
+    except Exception:
+        return False
 
+
+async def _deny(update: Update):
     if update.callback_query:
-        await update.callback_query.answer()
+        await update.callback_query.answer("⛔ Access denied.", show_alert=True)
+    elif update.effective_message:
+        await update.effective_message.reply_text("⛔ Access denied.")
+    return ConversationHandler.END
+
+
+async def _safe_edit_or_send(update: Update, text: str, reply_markup=None):
+    if update.callback_query:
         try:
             await update.callback_query.edit_message_text(
                 text,
                 parse_mode=ParseMode.MARKDOWN,
-                reply_markup=admin_main(),
+                reply_markup=reply_markup,
             )
         except Exception:
             await update.effective_chat.send_message(
                 text,
                 parse_mode=ParseMode.MARKDOWN,
-                reply_markup=admin_main(),
+                reply_markup=reply_markup,
             )
     else:
         await update.effective_message.reply_text(
             text,
             parse_mode=ParseMode.MARKDOWN,
-            reply_markup=admin_main(),
+            reply_markup=reply_markup,
         )
 
 
+async def _show_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_admin(update):
+        return await _deny(update)
+
+    cnt = db.student_count()
+    text = (
+        "👨‍💼 *Admin Panel — Lingua Bot*\n\n"
+        f"👥 Students: *{cnt}*\n\n"
+        "Choose an action:"
+    )
+
+    if update.callback_query:
+        await update.callback_query.answer()
+
+    await _safe_edit_or_send(update, text, admin_main())
+
+
 async def show_lessons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_admin(update):
+        return await _deny(update)
+
     await update.callback_query.answer()
 
     lessons = db.all_lessons()
@@ -62,19 +89,22 @@ async def show_lessons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     lesson_list = []
-    for l in lessons:
-        d = dict(l)
-        d["has_content"] = db.lesson_has_content(l["id"])
+    for lesson in lessons:
+        d = dict(lesson)
+        d["has_content"] = db.lesson_has_content(lesson["id"])
         lesson_list.append(d)
 
     await update.callback_query.edit_message_text(
-        f"📂 *Lessons* ({len(lessons)})\n\nSelect a lesson to manage:",
+        f"📂 *Lessons* ({len(lesson_list)})\n\nSelect a lesson to manage:",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=admin_lessons(lesson_list),
     )
 
 
 async def show_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: int):
+    if not _is_admin(update):
+        return await _deny(update)
+
     await update.callback_query.answer()
 
     lesson = db.get_lesson(lid)
@@ -92,9 +122,9 @@ async def show_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: i
         medals = ["🥇", "🥈", "🥉"]
         lb_txt = "\n\n🏆 *Top scores:*\n"
 
-        for i, r in enumerate(scores):
-            name = r["full_name"] or r["username"] or "Student"
-            lb_txt += f" {medals[i]} {name[:18]} — {r['pct']}%\n"
+        for i, row in enumerate(scores):
+            name = row["full_name"] or row["username"] or "Student"
+            lb_txt += f" {medals[i]} {name[:18]} — {row['pct']}%\n"
 
     await update.callback_query.edit_message_text(
         f"{lesson['emoji']} *{lesson['title']}*\n"
@@ -107,9 +137,13 @@ async def show_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: i
 
 
 async def new_lesson_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_admin(update):
+        return await _deny(update)
+
     await update.callback_query.answer()
 
-    context.user_data.clear()
+    context.user_data.pop("upload_lid", None)
+    context.user_data.pop("rename_lid", None)
     context.user_data["waiting_new_lesson"] = True
 
     await update.callback_query.edit_message_text(
@@ -121,7 +155,10 @@ async def new_lesson_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def new_lesson_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    title = update.message.text.strip()
+    if not _is_admin(update):
+        return await _deny(update)
+
+    title = (update.message.text or "").strip()
 
     if not title:
         await update.message.reply_text("⚠️ Title required.")
@@ -141,7 +178,11 @@ async def new_lesson_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def upload_start(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: int):
-    context.user_data.clear()
+    if not _is_admin(update):
+        return await _deny(update)
+
+    context.user_data.pop("waiting_new_lesson", None)
+    context.user_data.pop("rename_lid", None)
     context.user_data["upload_lid"] = lid
 
     await update.callback_query.answer()
@@ -156,12 +197,18 @@ async def upload_start(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: 
         reply_markup=admin_lesson(lid),
     )
 
+    return ConversationHandler.END
+
 
 async def receive_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_admin(update):
+        return await _deny(update)
+
     lid = context.user_data.get("upload_lid")
 
     if not lid:
-        return
+        await update.message.reply_text("⚠️ First choose a lesson and tap *Upload Document*.")
+        return ConversationHandler.END
 
     doc = update.message.document
 
@@ -170,7 +217,7 @@ async def receive_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚠️ Please send a document file.",
             reply_markup=admin_lesson(lid),
         )
-        return
+        return ConversationHandler.END
 
     file_name = (doc.file_name or "").lower()
 
@@ -180,7 +227,7 @@ async def receive_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=admin_lesson(lid),
         )
-        return
+        return ConversationHandler.END
 
     msg = await update.message.reply_text("⏳ Parsing document...")
 
@@ -188,7 +235,6 @@ async def receive_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         ext = ".pdf" if file_name.endswith(".pdf") else ".docx"
-
         telegram_file = await context.bot.get_file(doc.file_id)
 
         with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as t:
@@ -204,14 +250,15 @@ async def receive_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Check document headings or content format.",
                 reply_markup=admin_lesson(lid),
             )
-            return
+            return ConversationHandler.END
 
         total = 0
 
         for cat, blocks in parsed.items():
             for block in blocks:
-                db.add_content(lid, cat, block)
-                total += 1
+                if block and str(block).strip():
+                    db.add_content(lid, cat, str(block).strip())
+                    total += 1
 
         lesson = db.get_lesson(lid)
 
@@ -249,14 +296,38 @@ async def receive_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if tmp and os.path.exists(tmp):
             os.unlink(tmp)
 
+    return ConversationHandler.END
+
+
+async def rename_lesson_start(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: int):
+    if not _is_admin(update):
+        return await _deny(update)
+
+    context.user_data.pop("upload_lid", None)
+    context.user_data.pop("waiting_new_lesson", None)
+    context.user_data["rename_lid"] = lid
+
+    await update.callback_query.answer()
+
+    await update.callback_query.edit_message_text(
+        "✏️ *Rename Lesson*\n\nSend a new lesson title:",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=admin_lesson(lid),
+    )
+
+    return State.ADD_LESSON
+
 
 async def rename_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_admin(update):
+        return await _deny(update)
+
     lid = context.user_data.pop("rename_lid", None)
 
     if not lid:
         return ConversationHandler.END
 
-    new_title = update.message.text.strip()
+    new_title = (update.message.text or "").strip()
 
     if not new_title:
         await update.message.reply_text("⚠️ Lesson title cannot be empty.")
