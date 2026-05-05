@@ -17,54 +17,45 @@ SECTION_PATTERNS = {
         r"^(links?|url|website|web\s*site|resources?|https?://|www\.)\b",
         re.I,
     ),
-
     "visuals": re.compile(
         r"^(visuals?|image|picture|photo|diagram|chart|table|video|watch|look\s+at)\b",
         re.I,
     ),
-
     "vocabulary": re.compile(
         r"^(part\s*2\b|task\s*2\b|vocabulary|vocab|words?|definitions?|new\s*words?|"
         r"word\s*list|key\s*words?|glossary|useful\s*words?|match\s+the\s+words?|"
         r"word\s*bank|terms?|phrases?)\b",
         re.I,
     ),
-
     "speaking": re.compile(
         r"^(part\s*1\b|task\s*1\b|speaking|discussion|discuss|pair\s*work|group\s*work|"
         r"role\s*play|debate|presentation|students\s*discuss|real[-\s]*life\s*problem\s*solving)\b",
         re.I,
     ),
-
     "listening": re.compile(
         r"^(part\s*4\b|task\s*4\b|listening|listening\s*task|audio|track|recording|"
         r"listen\s+and|listen\s+to|before\s*listening|after\s*listening|fact\s*hunt)\b",
         re.I,
     ),
-
     "reading": re.compile(
         r"^(part\s*3\b|task\s*3\b|reading|reading\s*task|reading\s*passage|reading\s*text|"
         r"read\s+the\s+text|read\s+the\s+following|article|passage|text\s*[a-z]?|"
         r"data\s*processing\s*day)\b",
         re.I,
     ),
-
     "writing": re.compile(
         r"^(writing|writing\s*task|write|essay|paragraph|composition|critical\s*thinking|"
         r"reflection|summary)\b",
         re.I,
     ),
-
     "games": re.compile(
         r"^(game|games|puzzle|crossword|bingo|fun\s*activity|scramble|quizlet)\b",
         re.I,
     ),
-
     "homework": re.compile(
         r"^(homework|home\s*task|assignment|at\s*home|self[-\s]*study)\b",
         re.I,
     ),
-
     "test_quiz": re.compile(
         r"^(answer\s*key|answers?|answer\s*sheet|reading\s*answer\s*sheet|"
         r"listening\s*answer\s*sheet|test|quiz|exam|true\s*/?\s*false|"
@@ -89,6 +80,7 @@ ORDERED_CATEGORIES = [
 
 
 def _normalize(text: str) -> str:
+    text = text or ""
     text = text.replace("\xa0", " ")
     text = text.replace("–", "-").replace("—", "-")
     text = re.sub(r"[ \t]+", " ", text)
@@ -189,7 +181,6 @@ def _classify_section_title(text: str) -> str | None:
 
     for cat in ORDERED_CATEGORIES:
         pattern = SECTION_PATTERNS.get(cat)
-
         if pattern and pattern.search(low):
             return cat
 
@@ -270,7 +261,8 @@ def _extract_docx_blocks(path: str) -> tuple[list[tuple[str, str]], str]:
                 table_text = _table_to_text(tbl)
 
                 if table_text:
-                    detected = _classify_section_title(table_text.splitlines()[0])
+                    first_line = table_text.splitlines()[0]
+                    detected = _classify_section_title(first_line)
                     kind = "heading" if detected else "text"
                     items.append((kind, table_text))
 
@@ -371,7 +363,10 @@ def _guess_category_from_content(text: str) -> str | None:
     if re.search(r"https?://|www\.", low):
         return "links"
 
-    if re.search(r"\b(customer|delivery|product|payment|definition|means|match the word)\b", low):
+    if re.search(
+        r"\b(customer|delivery|product|payment|definition|definitions|means|match the word|word bank|vocabulary)\b",
+        low,
+    ):
         return "vocabulary"
 
     if re.search(r"\blisten\b|\baudio\b|\btrack\b|\brecording\b", low):
@@ -460,6 +455,23 @@ def _split_items_to_categories(
     flush()
 
     result = {k: v for k, v in result.items() if v}
+
+    # Fallback: agar parser hech qanday section topolmasa,
+    # document matni yo‘qolib ketmasin.
+    if not result:
+        all_text = []
+
+        for kind, text in items:
+            clean = _normalize(text)
+
+            if clean:
+                all_text.append(clean)
+
+        full_text = "\n".join(all_text).strip()
+
+        if full_text:
+            guessed = _guess_category_from_content(full_text) or "reading"
+            result[guessed] = [full_text]
 
     links = []
 
