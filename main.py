@@ -1,4 +1,5 @@
 """Lingua Bot — main entry point."""
+
 import logging
 import sys
 
@@ -26,7 +27,38 @@ async def _deny(update):
     await update.callback_query.answer("⛔ Access denied.", show_alert=True)
 
 
+def _clear_admin_states(context):
+    keys = [
+        "waiting_new_lesson",
+        "rename_lid",
+        "upload_lid",
+        "add_content",
+        "edit_cid",
+        "add_link_lid",
+        "waiting_login_user",
+        "waiting_login_pass",
+    ]
+
+    for key in keys:
+        context.user_data.pop(key, None)
+
+
+def _clear_edit_states(context):
+    keys = [
+        "waiting_new_lesson",
+        "rename_lid",
+        "add_content",
+        "edit_cid",
+        "add_link_lid",
+    ]
+
+    for key in keys:
+        context.user_data.pop(key, None)
+
+
 async def cmd_start(update, context):
+    _clear_admin_states(context)
+
     u = update.effective_user
 
     try:
@@ -61,6 +93,33 @@ async def callback_route(update, context):
     logger.info("CB: %s from %s", data, update.effective_chat.id)
 
     try:
+        if data in ("student", "admin", "a_main", "a_lessons"):
+            _clear_admin_states(context)
+
+        elif data.startswith(("al_", "aec_", "acat_", "alc_")):
+            _clear_edit_states(context)
+
+        elif data.startswith("aup_"):
+            _clear_edit_states(context)
+
+        elif data.startswith("aadd_"):
+            context.user_data.pop("upload_lid", None)
+            context.user_data.pop("waiting_new_lesson", None)
+            context.user_data.pop("rename_lid", None)
+            context.user_data.pop("add_link_lid", None)
+
+        elif data.startswith("aeit_"):
+            context.user_data.pop("upload_lid", None)
+            context.user_data.pop("waiting_new_lesson", None)
+            context.user_data.pop("rename_lid", None)
+            context.user_data.pop("add_link_lid", None)
+
+        elif data.startswith("aren_"):
+            _clear_admin_states(context)
+
+        elif data.startswith("alca_"):
+            _clear_admin_states(context)
+
         if data == "student":
             from bot.handlers.student.browse import show_lessons
             await show_lessons(update, context)
@@ -89,54 +148,65 @@ async def callback_route(update, context):
             await admin_entry_direct(update, context)
 
         elif data == "a_logout":
+            _clear_admin_states(context)
             from bot.handlers.admin.auth import admin_logout
             await admin_logout(update, context)
 
         elif data == "a_main":
             if not _is_admin(update):
                 return await _deny(update)
+
             from bot.handlers.admin.lessons import _show_main
             await _show_main(update, context)
 
         elif data == "a_lessons":
             if not _is_admin(update):
                 return await _deny(update)
+
             from bot.handlers.admin.lessons import show_lessons as al
             await al(update, context)
 
         elif data == "a_new":
             if not _is_admin(update):
                 return await _deny(update)
+
+            _clear_admin_states(context)
+
             from bot.handlers.admin.lessons import new_lesson_start
             await new_lesson_start(update, context)
 
         elif data == "a_analytics":
             if not _is_admin(update):
                 return await _deny(update)
+
             from bot.handlers.admin.analytics import show_analytics
             await show_analytics(update, context)
 
         elif data == "a_leaderboard":
             if not _is_admin(update):
                 return await _deny(update)
+
             from bot.handlers.admin.analytics import show_leaderboard
             await show_leaderboard(update, context)
 
         elif data == "a_submissions":
             if not _is_admin(update):
                 return await _deny(update)
+
             from bot.handlers.admin.analytics import show_submissions
             await show_submissions(update, context)
 
         elif data.startswith("al_"):
             if not _is_admin(update):
                 return await _deny(update)
+
             from bot.handlers.admin.lessons import show_lesson as asl
             await asl(update, context, int(data[3:]))
 
         elif data.startswith("aup_"):
             if not _is_admin(update):
                 return await _deny(update)
+
             from bot.handlers.admin.lessons import upload_start
             await upload_start(update, context, int(data[4:]))
 
@@ -157,24 +227,28 @@ async def callback_route(update, context):
         elif data.startswith("adel_confirm_"):
             if not _is_admin(update):
                 return await _deny(update)
+
             from bot.handlers.admin.content import delete_lesson_exec
             await delete_lesson_exec(update, context, int(data[13:]))
 
         elif data.startswith("adel_"):
             if not _is_admin(update):
                 return await _deny(update)
+
             from bot.handlers.admin.content import delete_lesson_confirm
             await delete_lesson_confirm(update, context, int(data[5:]))
 
         elif data.startswith("aqs_"):
             if not _is_admin(update):
                 return await _deny(update)
+
             from bot.handlers.admin.analytics import show_quiz_stats
             await show_quiz_stats(update, context, int(data[4:]))
 
         elif data.startswith("aec_"):
             if not _is_admin(update):
                 return await _deny(update)
+
             from bot.handlers.admin.content import show_cats
             await show_cats(update, context, int(data[4:]))
 
@@ -211,30 +285,35 @@ async def callback_route(update, context):
         elif data.startswith("aeit_"):
             if not _is_admin(update):
                 return await _deny(update)
+
             from bot.handlers.admin.content import edit_item_start
             await edit_item_start(update, context, int(data[5:]))
 
         elif data.startswith("adit_"):
             if not _is_admin(update):
                 return await _deny(update)
+
             from bot.handlers.admin.content import del_item
             await del_item(update, context, int(data[5:]))
 
         elif data.startswith("alc_"):
             if not _is_admin(update):
                 return await _deny(update)
+
             from bot.handlers.admin.links_mgr import show_links
             await show_links(update, context, int(data[4:]))
 
         elif data.startswith("alca_"):
             if not _is_admin(update):
                 return await _deny(update)
+
             from bot.handlers.admin.links_mgr import add_link_start
             await add_link_start(update, context, int(data[5:]))
 
         elif data.startswith("alcd_"):
             if not _is_admin(update):
                 return await _deny(update)
+
             from bot.handlers.admin.links_mgr import del_link
             await del_link(update, context, int(data[5:]))
 
@@ -293,18 +372,38 @@ async def text_msg(update, context):
 
     except Exception as e:
         logger.exception("text_msg: %s", e)
+        await update.message.reply_text("⚠️ Error. Please try again.")
 
 
 async def doc_msg(update, context):
-    if context.user_data.get("upload_lid"):
-        from bot.handlers.admin.lessons import receive_doc
-        await receive_doc(update, context)
+    try:
+        if context.user_data.get("upload_lid"):
+            from bot.handlers.admin.lessons import receive_doc
+            await receive_doc(update, context)
+            return
+
+        await update.message.reply_text(
+            "⚠️ Please first choose:\n"
+            "Admin Panel → Lessons → Lesson → Upload Document"
+        )
+
+    except Exception as e:
+        logger.exception("doc_msg: %s", e)
+        await update.message.reply_text("⚠️ Document upload error. Please try again.")
 
 
 async def audio_msg(update, context):
-    if context.user_data.get("add_content"):
-        from bot.handlers.admin.content import save_audio_content
-        await save_audio_content(update, context)
+    try:
+        if context.user_data.get("add_content"):
+            from bot.handlers.admin.content import save_audio_content
+            await save_audio_content(update, context)
+            return
+
+        await update.message.reply_text("⚠️ Please choose Add Content first.")
+
+    except Exception as e:
+        logger.exception("audio_msg: %s", e)
+        await update.message.reply_text("⚠️ Audio upload error. Please try again.")
 
 
 async def error_handler(update, context):
@@ -314,6 +413,7 @@ async def error_handler(update, context):
 async def post_init(app):
     try:
         info = await app.bot.get_webhook_info()
+
         if info.url:
             await app.bot.delete_webhook(drop_pending_updates=True)
 
