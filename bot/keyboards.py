@@ -8,6 +8,7 @@ CAT_MAP = {
     "links": "Links",
     "visuals": "Visuals",
     "vocabulary": "Vocabulary",
+    "grammar": "Grammar",
     "speaking": "Speaking",
     "listening": "Listening",
     "reading": "Reading",
@@ -21,6 +22,7 @@ CAT_EMOJI = {
     "links": "🔗",
     "visuals": "🖼",
     "vocabulary": "📖",
+    "grammar": "📘",
     "speaking": "🗣",
     "listening": "🎧",
     "reading": "📚",
@@ -41,17 +43,28 @@ def _cat_emoji(key: str) -> str:
 
 def student_lessons(lessons):
     if not lessons:
-        return Kb([[Btn("🏠 Refresh", callback_data="student")]])
+        return Kb([
+            [Btn("🏠 Refresh", callback_data="student")]
+        ])
 
     return Kb([
-        [Btn(f"{l['emoji']} {l['title']}", callback_data=f"sl_{l['id']}")]
+        [
+            Btn(
+                f"{l.get('emoji', '📘')} {l.get('title', 'Untitled')}",
+                callback_data=f"sl_{l['id']}",
+            )
+        ]
         for l in lessons
     ])
 
 
 def student_cats(lid, available):
     always = {"links", "games"}
-    ordered = [key for _, key in CATEGORIES if key in available or key in always]
+
+    ordered = [
+        key for _, key in CATEGORIES
+        if key in available or key in always
+    ]
 
     btns = []
     row = []
@@ -71,17 +84,23 @@ def student_cats(lid, available):
     if row:
         btns.append(row)
 
-    btns.append([Btn("🏠 All Lessons", callback_data="student")])
+    btns.append([
+        Btn("🏠 All Lessons", callback_data="student")
+    ])
 
     return Kb(btns)
 
 
 def back_to_lesson(lid):
-    return Kb([[Btn("📚 Back to Lesson", callback_data=f"sl_{lid}")]])
+    return Kb([
+        [Btn("📚 Back to Lesson", callback_data=f"sl_{lid}")]
+    ])
 
 
 def back_to_lessons():
-    return Kb([[Btn("🏠 All Lessons", callback_data="student")]])
+    return Kb([
+        [Btn("🏠 All Lessons", callback_data="student")]
+    ])
 
 
 def admin_main():
@@ -94,7 +113,9 @@ def admin_main():
             Btn("📊 Analytics", callback_data="a_analytics"),
             Btn("🏆 Leaderboard", callback_data="a_leaderboard"),
         ],
-        [Btn("🚪 Logout", callback_data="a_logout")],
+        [
+            Btn("🚪 Logout", callback_data="a_logout")
+        ],
     ])
 
 
@@ -113,7 +134,9 @@ def admin_lessons(lessons):
             )
         ])
 
-    btns.append([Btn("⬅️ Back", callback_data="a_main")])
+    btns.append([
+        Btn("⬅️ Back", callback_data="a_main")
+    ])
 
     return Kb(btns)
 
@@ -132,7 +155,9 @@ def admin_lesson(lid):
             Btn("✏️ Rename", callback_data=f"aren_{lid}"),
             Btn("🗑 Delete", callback_data=f"adel_{lid}"),
         ],
-        [Btn("⬅️ Back to Lessons", callback_data="a_lessons")],
+        [
+            Btn("⬅️ Back to Lessons", callback_data="a_lessons")
+        ],
     ])
 
 
@@ -147,7 +172,9 @@ def admin_cats(lid):
             )
         ])
 
-    btns.append([Btn("⬅️ Back to Lesson", callback_data=f"al_{lid}")])
+    btns.append([
+        Btn("⬅️ Back to Lesson", callback_data=f"al_{lid}")
+    ])
 
     return Kb(btns)
 
@@ -158,7 +185,9 @@ def admin_cat_actions(lid, cat):
             Btn("➕ Add Content", callback_data=f"aadd_{lid}_{cat}"),
             Btn("🗑 Clear All", callback_data=f"aclr_{lid}_{cat}"),
         ],
-        [Btn("⬅️ Back to Categories", callback_data=f"aec_{lid}")],
+        [
+            Btn("⬅️ Back to Categories", callback_data=f"aec_{lid}")
+        ],
     ])
 
 
@@ -168,7 +197,9 @@ def admin_content_item(cid, lid, cat):
             Btn("✏️ Edit", callback_data=f"aeit_{cid}"),
             Btn("🗑 Delete", callback_data=f"adit_{cid}"),
         ],
-        [Btn("⬅️ Back to Categories", callback_data=f"aec_{lid}")],
+        [
+            Btn("⬅️ Back to Categories", callback_data=f"aec_{lid}")
+        ],
     ])
 
 
@@ -190,7 +221,12 @@ def admin_links(lid, link_items):
             Btn("🗑 Delete", callback_data=f"alcd_{cid}"),
         ])
 
-    btns.append([Btn("➕ Add Link", callback_data=f"alca_{lid}")])
-    btns.append([Btn("⬅️ Back to Lesson", callback_data=f"al_{lid}")])
+    btns.append([
+        Btn("➕ Add Link", callback_data=f"alca_{lid}")
+    ])
+
+    btns.append([
+        Btn("⬅️ Back to Lesson", callback_data=f"al_{lid}")
+    ])
 
     return Kb(btns)
