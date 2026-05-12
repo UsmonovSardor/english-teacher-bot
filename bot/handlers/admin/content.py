@@ -114,6 +114,12 @@ async def show_cat(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: int,
             preview = "🎧 Audio file"
         elif body.startswith("[VOICE]"):
             preview = "🎙 Voice message"
+        elif body.startswith("[FILE]"):
+            try:
+                _file_id, file_name = body[6:].split("|", 1)
+            except ValueError:
+                file_name = "document"
+            preview = f"📎 File: {file_name}"
         else:
             preview = body[:400] + ("…" if len(body) > 400 else "")
 
@@ -205,7 +211,8 @@ async def save_document_content(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text("⚠️ Please send PDF or DOCX file.")
         return ConversationHandler.END
 
-    file_name = (doc.file_name or "").lower()
+    file_name_original = doc.file_name or "document"
+    file_name = file_name_original.lower()
 
     if not (file_name.endswith(".pdf") or file_name.endswith(".docx")):
         await update.message.reply_text("⚠️ Please send only PDF or DOCX file.")
@@ -249,22 +256,26 @@ async def save_document_content(update: Update, context: ContextTypes.DEFAULT_TY
             if block and str(block).strip()
         ]
 
-        if not clean_blocks:
+        lbl = CAT_LABEL.get(selected_cat, selected_cat)
+
+        if clean_blocks:
+            for block in clean_blocks:
+                db.add_content(info["lid"], selected_cat, block)
+
             await msg.edit_text(
-                "⚠️ No readable content found in this file.\n\n"
-                "Bu PDF rasm/scanned PDF bo‘lishi mumkin. Text bor PDF/DOCX yuboring.",
+                f"✅ File text added to *{lbl}*!\n\n"
+                f"📦 {len(clean_blocks)} block(s) saved.",
+                parse_mode=ParseMode.MARKDOWN,
                 reply_markup=admin_cat_actions(info["lid"], selected_cat),
             )
             return ConversationHandler.END
 
-        for block in clean_blocks:
-            db.add_content(info["lid"], selected_cat, block)
-
-        lbl = CAT_LABEL.get(selected_cat, selected_cat)
+        file_body = f"[FILE]{doc.file_id}|{file_name_original}"
+        db.add_content(info["lid"], selected_cat, file_body)
 
         await msg.edit_text(
-            f"✅ File content added to *{lbl}*!\n\n"
-            f"📦 {len(clean_blocks)} block(s) saved.",
+            f"✅ File added to *{lbl}*!\n\n"
+            f"📎 PDF/DOCX text o‘qilmadi, lekin fayl sifatida saqlandi.",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=admin_cat_actions(info["lid"], selected_cat),
         )
