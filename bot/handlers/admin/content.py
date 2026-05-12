@@ -22,6 +22,64 @@ from bot.keyboards import (
 CAT_LABEL = {key: lbl for lbl, key in CATEGORIES}
 
 
+def _split_text(text: str, max_len: int = 3500):
+    text = (text or "").strip()
+    if not text:
+        return []
+
+    parts = []
+    while len(text) > max_len:
+        cut = text.rfind("\n\n", 0, max_len)
+        if cut == -1:
+            cut = text.rfind("\n", 0, max_len)
+        if cut == -1:
+            cut = max_len
+
+        parts.append(text[:cut].strip())
+        text = text[cut:].strip()
+
+    if text:
+        parts.append(text)
+
+    return parts
+
+
+def _read_pdf_text(path: str) -> str:
+    try:
+        import fitz
+
+        pdf = fitz.open(path)
+        pages = []
+
+        for page in pdf:
+            txt = page.get_text("text")
+            if txt and txt.strip():
+                pages.append(txt.strip())
+
+        pdf.close()
+        return "\n\n".join(pages).strip()
+
+    except Exception:
+        return ""
+
+
+def _read_docx_text(path: str) -> str:
+    try:
+        from docx import Document
+
+        document = Document(path)
+        paragraphs = []
+
+        for p in document.paragraphs:
+            if p.text and p.text.strip():
+                paragraphs.append(p.text.strip())
+
+        return "\n\n".join(paragraphs).strip()
+
+    except Exception:
+        return ""
+
+
 async def show_cats(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: int):
     await update.callback_query.answer()
 
@@ -166,10 +224,13 @@ async def save_document_content(update: Update, context: ContextTypes.DEFAULT_TY
 
         await tg_file.download_to_drive(tmp)
 
-        parsed, _title = parse_document(tmp)
-
         selected_cat = info["cat"]
         blocks = []
+
+        try:
+            parsed, _title = parse_document(tmp)
+        except Exception:
+            parsed = {}
 
         if parsed:
             blocks = parsed.get(selected_cat, [])
@@ -177,6 +238,10 @@ async def save_document_content(update: Update, context: ContextTypes.DEFAULT_TY
             if not blocks:
                 for _cat, cat_blocks in parsed.items():
                     blocks.extend(cat_blocks)
+
+        if not blocks:
+            raw_text = _read_pdf_text(tmp) if ext == ".pdf" else _read_docx_text(tmp)
+            blocks = _split_text(raw_text)
 
         clean_blocks = [
             str(block).strip()
@@ -186,7 +251,8 @@ async def save_document_content(update: Update, context: ContextTypes.DEFAULT_TY
 
         if not clean_blocks:
             await msg.edit_text(
-                "⚠️ No readable content found in this file.",
+                "⚠️ No readable content found in this file.\n\n"
+                "Bu PDF rasm/scanned PDF bo‘lishi mumkin. Text bor PDF/DOCX yuboring.",
                 reply_markup=admin_cat_actions(info["lid"], selected_cat),
             )
             return ConversationHandler.END
@@ -229,10 +295,7 @@ async def save_audio_content(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("⚠️ Please send an audio or voice file.")
         return ConversationHandler.END
 
-    if audio:
-        body = f"[AUDIO]{audio.file_id}"
-    else:
-        body = f"[VOICE]{voice.file_id}"
+    body = f"[AUDIO]{audio.file_id}" if audio else f"[VOICE]{voice.file_id}"
 
     db.add_content(info["lid"], info["cat"], body)
 
