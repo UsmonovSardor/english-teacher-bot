@@ -188,16 +188,17 @@ async def upload_start(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: 
     await update.callback_query.answer()
 
     await update.callback_query.edit_message_text(
-        "📤 *Upload Document*\n\n"
-        "Send a *.docx* or *.pdf* file — I'll auto-parse it into:\n"
+        "📤 *Upload / Update Document*\n\n"
+        "Send a *.docx* or *.pdf* file.\n\n"
+        "✅ If this lesson already has content, the same categories will be replaced.\n"
+        "✅ You can update an existing lesson by sending a new file.\n\n"
         "_Links • Visuals • Vocabulary • Speaking • Listening •\n"
-        "Reading • Writing • Games • Homework • Test & Quiz_\n\n"
-        "⚡ You can upload multiple files — content will be appended.",
+        "Reading • Writing • Games • Homework • Test & Quiz_",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=admin_lesson(lid),
     )
 
-    return ConversationHandler.END
+    return State.UPLOAD_DOC
 
 
 async def receive_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -207,17 +208,20 @@ async def receive_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lid = context.user_data.get("upload_lid")
 
     if not lid:
-        await update.message.reply_text("⚠️ First choose a lesson and tap *Upload Document*.")
+        await update.message.reply_text(
+            "⚠️ First choose a lesson and tap *Upload Document*.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
         return ConversationHandler.END
 
     doc = update.message.document
 
     if not doc:
         await update.message.reply_text(
-            "⚠️ Please send a document file.",
+            "⚠️ Please send PDF or DOCX file only.",
             reply_markup=admin_lesson(lid),
         )
-        return ConversationHandler.END
+        return State.UPLOAD_DOC
 
     file_name = (doc.file_name or "").lower()
 
@@ -227,7 +231,7 @@ async def receive_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=admin_lesson(lid),
         )
-        return ConversationHandler.END
+        return State.UPLOAD_DOC
 
     msg = await update.message.reply_text("⏳ Parsing document...")
 
@@ -253,12 +257,24 @@ async def receive_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
 
         total = 0
+        replaced_categories = 0
 
         for cat, blocks in parsed.items():
-            for block in blocks:
-                if block and str(block).strip():
-                    db.add_content(lid, cat, str(block).strip())
-                    total += 1
+            clean_blocks = [
+                str(block).strip()
+                for block in blocks
+                if block and str(block).strip()
+            ]
+
+            if not clean_blocks:
+                continue
+
+            db.clear_category(lid, cat)
+            replaced_categories += 1
+
+            for block in clean_blocks:
+                db.add_content(lid, cat, block)
+                total += 1
 
         lesson = db.get_lesson(lid)
 
@@ -270,12 +286,15 @@ async def receive_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 lesson["emoji"] or "📘",
             )
 
-        lines = ["✅ *Parsed successfully!*\n"]
+        lines = ["✅ *Document updated successfully!*\n"]
 
         for cat, blocks in sorted(parsed.items()):
-            lines.append(f"{CAT_LABEL.get(cat, cat)}: {len(blocks)} block(s)")
+            clean_count = len([b for b in blocks if b and str(b).strip()])
+            if clean_count:
+                lines.append(f"{CAT_LABEL.get(cat, cat)}: {clean_count} block(s)")
 
-        lines.append(f"\n📦 *{total} content blocks* added")
+        lines.append(f"\n♻️ *{replaced_categories} categories* replaced")
+        lines.append(f"📦 *{total} content blocks* saved")
 
         await msg.edit_text(
             "\n".join(lines),
@@ -293,6 +312,8 @@ async def receive_doc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     finally:
+        context.user_data.pop("upload_lid", None)
+
         if tmp and os.path.exists(tmp):
             os.unlink(tmp)
 
