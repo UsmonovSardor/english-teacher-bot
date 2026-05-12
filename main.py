@@ -38,7 +38,6 @@ def _clear_admin_states(context):
         "waiting_login_user",
         "waiting_login_pass",
     ]
-
     for key in keys:
         context.user_data.pop(key, None)
 
@@ -47,11 +46,9 @@ def _clear_edit_states(context):
     keys = [
         "waiting_new_lesson",
         "rename_lid",
-        "add_content",
         "edit_cid",
         "add_link_lid",
     ]
-
     for key in keys:
         context.user_data.pop(key, None)
 
@@ -101,18 +98,21 @@ async def callback_route(update, context):
 
         elif data.startswith("aup_"):
             _clear_edit_states(context)
+            context.user_data.pop("add_content", None)
 
         elif data.startswith("aadd_"):
             context.user_data.pop("upload_lid", None)
             context.user_data.pop("waiting_new_lesson", None)
             context.user_data.pop("rename_lid", None)
             context.user_data.pop("add_link_lid", None)
+            context.user_data.pop("edit_cid", None)
 
         elif data.startswith("aeit_"):
             context.user_data.pop("upload_lid", None)
             context.user_data.pop("waiting_new_lesson", None)
             context.user_data.pop("rename_lid", None)
             context.user_data.pop("add_link_lid", None)
+            context.user_data.pop("add_content", None)
 
         elif data.startswith("aren_"):
             _clear_admin_states(context)
@@ -214,15 +214,8 @@ async def callback_route(update, context):
             if not _is_admin(update):
                 return await _deny(update)
 
-            lid = int(data[5:])
-            await update.callback_query.answer()
-
-            await update.callback_query.edit_message_text(
-                "✏️ *Rename Lesson*\n\nSend the new lesson title:",
-                parse_mode="Markdown",
-            )
-
-            context.user_data["rename_lid"] = lid
+            from bot.handlers.admin.lessons import rename_lesson_start
+            await rename_lesson_start(update, context, int(data[5:]))
 
         elif data.startswith("adel_confirm_"):
             if not _is_admin(update):
@@ -354,7 +347,6 @@ async def text_msg(update, context):
             await process_username(update, context)
 
         elif context.user_data.get("waiting_new_lesson"):
-            context.user_data.pop("waiting_new_lesson", None)
             from bot.handlers.admin.lessons import new_lesson_save
             await new_lesson_save(update, context)
 
@@ -382,9 +374,16 @@ async def doc_msg(update, context):
             await receive_doc(update, context)
             return
 
+        if context.user_data.get("add_content"):
+            from bot.handlers.admin.content import save_document_content
+            await save_document_content(update, context)
+            return
+
         await update.message.reply_text(
             "⚠️ Please first choose:\n"
-            "Admin Panel → Lessons → Lesson → Upload Document"
+            "Admin Panel → Lessons → Lesson → Upload Document\n\n"
+            "or\n\n"
+            "Admin Panel → Lessons → Lesson → Edit Content → Category → Add Content"
         )
 
     except Exception as e:
@@ -440,7 +439,16 @@ async def post_init(app):
 
 
 def build():
-    app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
+    app = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .post_init(post_init)
+        .read_timeout(60)
+        .write_timeout(60)
+        .connect_timeout(60)
+        .pool_timeout(60)
+        .build()
+    )
 
     app.add_error_handler(error_handler)
 
