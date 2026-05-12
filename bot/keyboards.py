@@ -1,6 +1,8 @@
 """All Telegram keyboards — premium design."""
+
 from telegram import InlineKeyboardButton as Btn, InlineKeyboardMarkup as Kb
 from core.config import CATEGORIES
+
 
 CAT_MAP = {
     "links": "Links",
@@ -29,7 +31,18 @@ CAT_EMOJI = {
 }
 
 
+def _cat_label(key: str) -> str:
+    return CAT_MAP.get(key, key.replace("_", " ").title())
+
+
+def _cat_emoji(key: str) -> str:
+    return CAT_EMOJI.get(key, "📄")
+
+
 def student_lessons(lessons):
+    if not lessons:
+        return Kb([[Btn("🏠 Refresh", callback_data="student")]])
+
     return Kb([
         [Btn(f"{l['emoji']} {l['title']}", callback_data=f"sl_{l['id']}")]
         for l in lessons
@@ -40,12 +53,13 @@ def student_cats(lid, available):
     always = {"links", "games"}
     ordered = [key for _, key in CATEGORIES if key in available or key in always]
 
-    btns, row = [], []
+    btns = []
+    row = []
 
     for key in ordered:
         row.append(
             Btn(
-                f"{CAT_EMOJI.get(key, '📄')} {CAT_MAP.get(key, key.title())}",
+                f"{_cat_emoji(key)} {_cat_label(key)}",
                 callback_data=f"sc_{lid}_{key}",
             )
         )
@@ -85,15 +99,19 @@ def admin_main():
 
 
 def admin_lessons(lessons):
-    btns = [
-        [
+    btns = []
+
+    for l in lessons:
+        status = "✅" if l.get("has_content") else "⚠️"
+        emoji = l.get("emoji") or "📘"
+        title = l.get("title") or "Untitled"
+
+        btns.append([
             Btn(
-                f"{'✅' if l.get('has_content') else '⚠️'} {l['emoji']} {l['title']}",
+                f"{status} {emoji} {title}",
                 callback_data=f"al_{l['id']}",
             )
-        ]
-        for l in lessons
-    ]
+        ])
 
     btns.append([Btn("⬅️ Back", callback_data="a_main")])
 
@@ -119,17 +137,17 @@ def admin_lesson(lid):
 
 
 def admin_cats(lid):
-    btns = [
-        [
+    btns = []
+
+    for _, key in CATEGORIES:
+        btns.append([
             Btn(
-                f"{CAT_EMOJI.get(key, '📄')} {CAT_MAP.get(key, key.title())}",
+                f"{_cat_emoji(key)} {_cat_label(key)}",
                 callback_data=f"acat_{lid}_{key}",
             )
-        ]
-        for _, key in CATEGORIES
-    ]
+        ])
 
-    btns.append([Btn("⬅️ Back", callback_data=f"al_{lid}")])
+    btns.append([Btn("⬅️ Back to Lesson", callback_data=f"al_{lid}")])
 
     return Kb(btns)
 
@@ -140,7 +158,7 @@ def admin_cat_actions(lid, cat):
             Btn("➕ Add Content", callback_data=f"aadd_{lid}_{cat}"),
             Btn("🗑 Clear All", callback_data=f"aclr_{lid}_{cat}"),
         ],
-        [Btn("⬅️ Back", callback_data=f"aec_{lid}")],
+        [Btn("⬅️ Back to Categories", callback_data=f"aec_{lid}")],
     ])
 
 
@@ -150,7 +168,7 @@ def admin_content_item(cid, lid, cat):
             Btn("✏️ Edit", callback_data=f"aeit_{cid}"),
             Btn("🗑 Delete", callback_data=f"adit_{cid}"),
         ],
-        [Btn("⬅️ Back", callback_data=f"acat_{lid}_{cat}")],
+        [Btn("⬅️ Back to Categories", callback_data=f"aec_{lid}")],
     ])
 
 
@@ -173,6 +191,6 @@ def admin_links(lid, link_items):
         ])
 
     btns.append([Btn("➕ Add Link", callback_data=f"alca_{lid}")])
-    btns.append([Btn("⬅️ Back", callback_data=f"al_{lid}")])
+    btns.append([Btn("⬅️ Back to Lesson", callback_data=f"al_{lid}")])
 
     return Kb(btns)
