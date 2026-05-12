@@ -1,5 +1,8 @@
 """Student content — PDF tasks with timer, quiz, games."""
-import os, re, logging
+
+import os
+import re
+import logging
 from datetime import datetime
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -51,8 +54,27 @@ def _fmt_dur(secs):
     return f"{m} min {s} sec" if m else f"{s} sec"
 
 
-def _is_media_body(body: str) -> bool:
+def _is_audio_body(body: str) -> bool:
     return body.startswith("[AUDIO]") or body.startswith("[VOICE]")
+
+
+def _is_file_body(body: str) -> bool:
+    return body.startswith("[FILE]")
+
+
+def _is_special_body(body: str) -> bool:
+    return _is_audio_body(body) or _is_file_body(body)
+
+
+def _parse_file_body(body: str):
+    raw = body.replace("[FILE]", "", 1)
+
+    if "|" in raw:
+        file_id, file_name = raw.split("|", 1)
+    else:
+        file_id, file_name = raw, "document.pdf"
+
+    return file_id.strip(), file_name.strip() or "document.pdf"
 
 
 async def _send_media_rows(chat, rows):
@@ -64,6 +86,19 @@ async def _send_media_rows(chat, rows):
 
         elif body.startswith("[VOICE]"):
             await chat.send_voice(body.replace("[VOICE]", "", 1))
+
+
+async def _send_file_rows(chat, rows, lid):
+    for row in rows:
+        body = row["body"]
+        file_id, file_name = _parse_file_body(body)
+
+        await chat.send_document(
+            document=file_id,
+            filename=file_name,
+            caption=f"📎 {file_name}",
+            reply_markup=back_to_lesson(lid),
+        )
 
 
 async def show_category(update, context, lid, cat):
@@ -111,18 +146,22 @@ async def _send_task_pdf(update, context, lesson, lid, cat):
         )
         return
 
-    media_rows = [r for r in rows if _is_media_body(r["body"])]
-    text_rows = [r for r in rows if not _is_media_body(r["body"])]
-
-    blocks = [_strip_answers(r["body"]) for r in text_rows]
-    blocks = [b for b in blocks if b.strip()]
+    media_rows = [r for r in rows if _is_audio_body(r["body"])]
+    file_rows = [r for r in rows if _is_file_body(r["body"])]
+    text_rows = [r for r in rows if not _is_special_body(r["body"])]
 
     if media_rows:
         await _send_media_rows(update.effective_chat, media_rows)
 
+    if file_rows:
+        await _send_file_rows(update.effective_chat, file_rows, lid)
+
+    blocks = [_strip_answers(r["body"]) for r in text_rows]
+    blocks = [b for b in blocks if b.strip()]
+
     if not blocks:
         await update.callback_query.edit_message_text(
-            f"📄 *{label}*\n\nAudio has been sent. No text task was added.",
+            f"📄 *{label}*\n\nFile/audio content has been sent.",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=back_to_lesson(lid),
         )
@@ -270,7 +309,7 @@ async def handle_task_answer(update, context):
 async def _send_pdf(update, context, lesson, lid, cat):
     label = CAT_LABEL.get(cat, cat.capitalize())
 
-    await update.callback_query.answer("Preparing PDF…")
+    await update.callback_query.answer("Preparing content…")
 
     rows = db.category_content(lid, cat)
 
@@ -282,11 +321,27 @@ async def _send_pdf(update, context, lesson, lid, cat):
         )
         return
 
-    media_rows = [r for r in rows if _is_media_body(r["body"])]
-    text_rows = [r for r in rows if not _is_media_body(r["body"])]
+    media_rows = [r for r in rows if _is_audio_body(r["body"])]
+    file_rows = [r for r in rows if _is_file_body(r["body"])]
+    text_rows = [r for r in rows if not _is_special_body(r["body"])]
 
     if media_rows:
         await _send_media_rows(update.effective_chat, media_rows)
+
+    if file_rows:
+        await _send_file_rows(update.effective_chat, file_rows, lid)
+
+    blocks = [_strip_answers(r["body"]) for r in text_rows]
+    blocks = [b for b in blocks if b.strip()]
+
+    if not blocks:
+        await update.callback_query.edit_message_text(
+            f"📄 *{label}*\n\nFile/audio content has been sent.",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=back_to_lesson(lid),
+        )
+        db.log(update.effective_user.id, lid, cat, "file")
+        return
 
     prep = await update.effective_chat.send_message(
         f"📄 *Preparing {label}...*\n⏳ Please wait...",
@@ -303,16 +358,6 @@ async def _send_pdf(update, context, lesson, lid, cat):
     tmp = None
 
     try:
-        blocks = [_strip_answers(r["body"]) for r in text_rows]
-        blocks = [b for b in blocks if b.strip()]
-
-        if not blocks:
-            await prep.edit_text(
-                "⚠️ No text content.",
-                reply_markup=back_to_lesson(lid),
-            )
-            return
-
         tmp = generate_lesson_pdf(lesson["title"], cat, label, blocks)
         fname = f"{lesson['title'].replace(' ', '_')[:20]}_{cat}.pdf"
 
