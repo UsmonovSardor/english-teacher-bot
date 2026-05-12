@@ -1,10 +1,15 @@
 """Admin content CRUD."""
+
+import os
+import tempfile
+
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram.constants import ParseMode
 
 from core import database as db
 from core.config import State, CATEGORIES
+from core.parser import parse_document
 from bot.keyboards import (
     admin_cats,
     admin_cat_actions,
@@ -79,7 +84,7 @@ async def add_content_start(
 
     await update.callback_query.edit_message_text(
         f"➕ *Add to {CAT_LABEL.get(cat, cat)}*\n\n"
-        f"Type/paste content or send an audio/voice file:",
+        f"Type/paste content or send PDF/DOCX/audio/voice file:",
         parse_mode=ParseMode.MARKDOWN,
     )
 
@@ -125,6 +130,88 @@ async def save_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         return ConversationHandler.END
+
+    return ConversationHandler.END
+
+
+async def save_document_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    info = context.user_data.pop("add_content", None)
+
+    if not info:
+        await update.message.reply_text("⚠️ Please choose Add Content first.")
+        return ConversationHandler.END
+
+    doc = update.message.document
+
+    if not doc:
+        await update.message.reply_text("⚠️ Please send PDF or DOCX file.")
+        return ConversationHandler.END
+
+    file_name = (doc.file_name or "").lower()
+
+    if not (file_name.endswith(".pdf") or file_name.endswith(".docx")):
+        await update.message.reply_text("⚠️ Please send only PDF or DOCX file.")
+        return ConversationHandler.END
+
+    msg = await update.message.reply_text("⏳ Reading document...")
+
+    tmp = None
+
+    try:
+        ext = ".pdf" if file_name.endswith(".pdf") else ".docx"
+        tg_file = await context.bot.get_file(doc.file_id)
+
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as t:
+            tmp = t.name
+
+        await tg_file.download_to_drive(tmp)
+
+        parsed, _title = parse_document(tmp)
+
+        selected_cat = info["cat"]
+        blocks = []
+
+        if parsed:
+            blocks = parsed.get(selected_cat, [])
+
+            if not blocks:
+                for _cat, cat_blocks in parsed.items():
+                    blocks.extend(cat_blocks)
+
+        clean_blocks = [
+            str(block).strip()
+            for block in blocks
+            if block and str(block).strip()
+        ]
+
+        if not clean_blocks:
+            await msg.edit_text(
+                "⚠️ No readable content found in this file.",
+                reply_markup=admin_cat_actions(info["lid"], selected_cat),
+            )
+            return ConversationHandler.END
+
+        for block in clean_blocks:
+            db.add_content(info["lid"], selected_cat, block)
+
+        lbl = CAT_LABEL.get(selected_cat, selected_cat)
+
+        await msg.edit_text(
+            f"✅ File content added to *{lbl}*!\n\n"
+            f"📦 {len(clean_blocks)} block(s) saved.",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=admin_cat_actions(info["lid"], selected_cat),
+        )
+
+    except Exception as e:
+        await msg.edit_text(
+            f"❌ Error while reading document:\n`{e}`",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+    finally:
+        if tmp and os.path.exists(tmp):
+            os.unlink(tmp)
 
     return ConversationHandler.END
 
