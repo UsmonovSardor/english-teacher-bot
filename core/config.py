@@ -98,3 +98,4 @@ class State:
     ADD_LESSON = 2
     EDIT_CONTENT = 3
     RENAME_LESSON = 4
+    UPLOAD_DOC = 5
