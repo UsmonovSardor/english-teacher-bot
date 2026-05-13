@@ -25,9 +25,17 @@ def _is_admin(update: Update) -> bool:
         return False
 
 
+async def _answer_query(update: Update, text=None, show_alert=False):
+    if update.callback_query:
+        try:
+            await update.callback_query.answer(text=text, show_alert=show_alert)
+        except Exception:
+            pass
+
+
 async def _deny(update: Update):
     if update.callback_query:
-        await update.callback_query.answer("⛔ Access denied.", show_alert=True)
+        await _answer_query(update, "⛔ Access denied.", True)
     elif update.effective_message:
         await update.effective_message.reply_text("⛔ Access denied.")
     return ConversationHandler.END
@@ -59,15 +67,14 @@ async def _show_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_admin(update):
         return await _deny(update)
 
+    await _answer_query(update)
+
     cnt = db.student_count()
     text = (
         "👨‍💼 *Admin Panel — Lingua Bot*\n\n"
         f"👥 Students: *{cnt}*\n\n"
         "Choose an action:"
     )
-
-    if update.callback_query:
-        await update.callback_query.answer()
 
     await _safe_edit_or_send(update, text, admin_main())
 
@@ -76,41 +83,51 @@ async def show_lessons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_admin(update):
         return await _deny(update)
 
-    await update.callback_query.answer()
+    await _answer_query(update)
 
     lessons = db.all_lessons()
 
     if not lessons:
-        await update.callback_query.edit_message_text(
+        await _safe_edit_or_send(
+            update,
             "📂 No lessons yet.\n\nTap *➕ New Lesson* to create one.",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=admin_main(),
+            admin_main(),
         )
-        return
+        return ConversationHandler.END
 
     lesson_list = []
+
     for lesson in lessons:
         d = dict(lesson)
         d["has_content"] = db.lesson_has_content(lesson["id"])
         lesson_list.append(d)
 
-    await update.callback_query.edit_message_text(
+    await _safe_edit_or_send(
+        update,
         f"📂 *Lessons* ({len(lesson_list)})\n\nSelect a lesson to manage:",
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=admin_lessons(lesson_list),
+        admin_lessons(lesson_list),
     )
+
+    return ConversationHandler.END
 
 
 async def show_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: int):
     if not _is_admin(update):
         return await _deny(update)
 
-    await update.callback_query.answer()
+    await _answer_query(update)
+
+    try:
+        lid = int(lid)
+    except Exception:
+        await _safe_edit_or_send(update, "⚠️ Invalid lesson ID.", admin_main())
+        return ConversationHandler.END
 
     lesson = db.get_lesson(lid)
+
     if not lesson:
-        await update.callback_query.edit_message_text("⚠️ Lesson not found.")
-        return
+        await _safe_edit_or_send(update, "⚠️ Lesson not found.", admin_main())
+        return ConversationHandler.END
 
     cats = db.available_categories(lid)
     has = f"✅ {len(cats)} categories" if cats else "⚠️ No content"
@@ -126,29 +143,32 @@ async def show_lesson(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: i
             name = row["full_name"] or row["username"] or "Student"
             lb_txt += f" {medals[i]} {name[:18]} — {row['pct']}%\n"
 
-    await update.callback_query.edit_message_text(
+    text = (
         f"{lesson['emoji']} *{lesson['title']}*\n"
         f"📌 {lesson['topic'] or 'No topic set'}\n"
         f"📅 {lesson['created_at'][:10]}\n"
-        f"Status: {has}{lb_txt}",
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=admin_lesson(lid),
+        f"Status: {has}{lb_txt}"
     )
+
+    await _safe_edit_or_send(update, text, admin_lesson(lid))
+
+    return ConversationHandler.END
 
 
 async def new_lesson_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_admin(update):
         return await _deny(update)
 
-    await update.callback_query.answer()
+    await _answer_query(update)
 
     context.user_data.pop("upload_lid", None)
     context.user_data.pop("rename_lid", None)
     context.user_data["waiting_new_lesson"] = True
 
-    await update.callback_query.edit_message_text(
+    await _safe_edit_or_send(
+        update,
         "📝 *New Lesson*\n\nEnter the lesson title:",
-        parse_mode=ParseMode.MARKDOWN,
+        None,
     )
 
     return State.ADD_LESSON
@@ -181,21 +201,33 @@ async def upload_start(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: 
     if not _is_admin(update):
         return await _deny(update)
 
+    await _answer_query(update)
+
+    try:
+        lid = int(lid)
+    except Exception:
+        await _safe_edit_or_send(update, "⚠️ Invalid lesson ID.", admin_main())
+        return ConversationHandler.END
+
+    lesson = db.get_lesson(lid)
+
+    if not lesson:
+        await _safe_edit_or_send(update, "⚠️ Lesson not found.", admin_main())
+        return ConversationHandler.END
+
     context.user_data.pop("waiting_new_lesson", None)
     context.user_data.pop("rename_lid", None)
     context.user_data["upload_lid"] = lid
 
-    await update.callback_query.answer()
-
-    await update.callback_query.edit_message_text(
+    await _safe_edit_or_send(
+        update,
         "📤 *Upload / Update Document*\n\n"
         "Send a *.docx* or *.pdf* file.\n\n"
         "✅ If this lesson already has content, the same categories will be replaced.\n"
         "✅ You can update an existing lesson by sending a new file.\n\n"
         "_Links • Visuals • Vocabulary • Speaking • Listening •\n"
         "Reading • Writing • Games • Homework • Test & Quiz_",
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=admin_lesson(lid),
+        admin_lesson(lid),
     )
 
     return State.UPLOAD_DOC
@@ -324,16 +356,28 @@ async def rename_lesson_start(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not _is_admin(update):
         return await _deny(update)
 
+    await _answer_query(update)
+
+    try:
+        lid = int(lid)
+    except Exception:
+        await _safe_edit_or_send(update, "⚠️ Invalid lesson ID.", admin_main())
+        return ConversationHandler.END
+
+    lesson = db.get_lesson(lid)
+
+    if not lesson:
+        await _safe_edit_or_send(update, "⚠️ Lesson not found.", admin_main())
+        return ConversationHandler.END
+
     context.user_data.pop("upload_lid", None)
     context.user_data.pop("waiting_new_lesson", None)
     context.user_data["rename_lid"] = lid
 
-    await update.callback_query.answer()
-
-    await update.callback_query.edit_message_text(
+    await _safe_edit_or_send(
+        update,
         "✏️ *Rename Lesson*\n\nSend a new lesson title:",
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=admin_lesson(lid),
+        admin_lesson(lid),
     )
 
     return State.ADD_LESSON
