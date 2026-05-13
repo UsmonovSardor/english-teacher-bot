@@ -28,10 +28,13 @@ def _split_text(text: str, max_len: int = 3500):
         return []
 
     parts = []
+
     while len(text) > max_len:
         cut = text.rfind("\n\n", 0, max_len)
+
         if cut == -1:
             cut = text.rfind("\n", 0, max_len)
+
         if cut == -1:
             cut = max_len
 
@@ -53,10 +56,12 @@ def _read_pdf_text(path: str) -> str:
 
         for page in pdf:
             txt = page.get_text("text")
+
             if txt and txt.strip():
                 pages.append(txt.strip())
 
         pdf.close()
+
         return "\n\n".join(pages).strip()
 
     except Exception:
@@ -84,6 +89,7 @@ async def show_cats(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: int
     await update.callback_query.answer()
 
     lesson = db.get_lesson(lid)
+
     if not lesson:
         await update.callback_query.answer("Lesson not found.", show_alert=True)
         return
@@ -112,14 +118,18 @@ async def show_cat(update: Update, context: ContextTypes.DEFAULT_TYPE, lid: int,
 
         if body.startswith("[AUDIO]"):
             preview = "🎧 Audio file"
+
         elif body.startswith("[VOICE]"):
             preview = "🎙 Voice message"
+
         elif body.startswith("[FILE]"):
             try:
                 _file_id, file_name = body[6:].split("|", 1)
             except ValueError:
                 file_name = "document"
+
             preview = f"📎 File: {file_name}"
+
         else:
             preview = body[:400] + ("…" if len(body) > 400 else "")
 
@@ -183,6 +193,7 @@ async def save_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("⚠️ Please send text content.")
             return ConversationHandler.END
 
+        db.clear_category(info["lid"], info["cat"])
         db.add_content(info["lid"], info["cat"], text)
 
         lbl = CAT_LABEL.get(info["cat"], info["cat"])
@@ -259,6 +270,8 @@ async def save_document_content(update: Update, context: ContextTypes.DEFAULT_TY
         lbl = CAT_LABEL.get(selected_cat, selected_cat)
 
         if clean_blocks:
+            db.clear_category(info["lid"], selected_cat)
+
             for block in clean_blocks:
                 db.add_content(info["lid"], selected_cat, block)
 
@@ -268,7 +281,10 @@ async def save_document_content(update: Update, context: ContextTypes.DEFAULT_TY
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=admin_cat_actions(info["lid"], selected_cat),
             )
+
             return ConversationHandler.END
+
+        db.clear_category(info["lid"], selected_cat)
 
         file_body = f"[FILE]{doc.file_id}|{file_name_original}"
         db.add_content(info["lid"], selected_cat, file_body)
@@ -308,6 +324,7 @@ async def save_audio_content(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     body = f"[AUDIO]{audio.file_id}" if audio else f"[VOICE]{voice.file_id}"
 
+    db.clear_category(info["lid"], info["cat"])
     db.add_content(info["lid"], info["cat"], body)
 
     lbl = CAT_LABEL.get(info["cat"], info["cat"])
