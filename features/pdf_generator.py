@@ -85,4 +85,4 @@ def generate_lesson_pdf(
     pdf.output(path)
 
     return path
-}
+
