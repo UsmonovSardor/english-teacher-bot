@@ -42,10 +42,6 @@ FONT_PATH = BASE_DIR / "fonts" / "DejaVuSans.ttf"
 
 
 def safe_text(text):
-    """
-    Removes unsupported emoji/symbols for PDF.
-    Prevents Helvetica/Unicode crash.
-    """
     text = str(text or "")
 
     replacements = {
@@ -75,7 +71,22 @@ def safe_text(text):
         text = text.replace(old, new)
 
     text = re.sub(r"[\U00010000-\U0010ffff]", "", text)
-    return text.strip()
+    text = text.replace("\r", "")
+
+    lines = []
+    for line in text.split("\n"):
+        line = re.sub(r"[ \t]+", " ", line).strip()
+        if line:
+            lines.append(line)
+
+    return "\n".join(lines).strip()
+
+
+def get_block_text(block):
+    if isinstance(block, dict):
+        return block.get("content") or block.get("text") or ""
+
+    return block
 
 
 def generate_lesson_pdf(
@@ -84,10 +95,6 @@ def generate_lesson_pdf(
     cat_label,
     content_blocks,
 ):
-    """
-    Safe PDF generator for Lingua Bot.
-    """
-
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
@@ -116,18 +123,18 @@ def generate_lesson_pdf(
     pdf.ln(18)
 
     pdf.set_text_color(0, 0, 0)
+    pdf.set_font(FONT, "", 12)
 
     if not content_blocks:
-        pdf.set_font(FONT, "", 12)
         pdf.multi_cell(0, 8, "No content added yet.")
     else:
         for block in content_blocks:
-            text = safe_text(block)
+            raw_text = get_block_text(block)
+            text = safe_text(raw_text)
 
             if not text:
                 continue
 
-            pdf.set_font(FONT, "", 12)
             pdf.multi_cell(0, 8, text)
             pdf.ln(3)
 
