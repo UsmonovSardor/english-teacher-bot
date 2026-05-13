@@ -34,7 +34,7 @@ CATEGORIES = [
     ("✍️ Writing", "writing"),
     ("🎮 Games", "games"),
     ("📝 Homework", "homework"),
-    ("📋 Test & Quiz", "test_quiz"),
+   
 ]
 
 CATEGORY_KEYWORDS = {
