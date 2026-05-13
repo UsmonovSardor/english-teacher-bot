@@ -33,6 +33,22 @@ CAT_EMOJI = {
 }
 
 
+def _row_to_dict(row):
+    try:
+        return dict(row)
+    except Exception:
+        return row or {}
+
+
+def _safe_get(row, key, default=None):
+    try:
+        if hasattr(row, "get"):
+            return row.get(key, default)
+        return row[key] if key in row.keys() else default
+    except Exception:
+        return default
+
+
 def _cat_label(key: str) -> str:
     return CAT_MAP.get(key, key.replace("_", " ").title())
 
@@ -47,19 +63,35 @@ def student_lessons(lessons):
             [Btn("🏠 Refresh", callback_data="student")]
         ])
 
-    return Kb([
-        [
+    btns = []
+
+    for lesson in lessons:
+        l = _row_to_dict(lesson)
+
+        lid = _safe_get(l, "id")
+        emoji = _safe_get(l, "emoji", "📘") or "📘"
+        title = _safe_get(l, "title", "Untitled") or "Untitled"
+
+        if not lid:
+            continue
+
+        btns.append([
             Btn(
-                f"{l.get('emoji', '📘')} {l.get('title', 'Untitled')}",
-                callback_data=f"sl_{l['id']}",
+                f"{emoji} {title}",
+                callback_data=f"sl_{lid}",
             )
-        ]
-        for l in lessons
-    ])
+        ])
+
+    if not btns:
+        btns.append([Btn("🏠 Refresh", callback_data="student")])
+
+    return Kb(btns)
 
 
 def student_cats(lid, available):
     always = {"links", "games"}
+
+    available = set(available or [])
 
     ordered = [
         key for _, key in CATEGORIES
@@ -122,17 +154,26 @@ def admin_main():
 def admin_lessons(lessons):
     btns = []
 
-    for l in lessons:
-        status = "✅" if l.get("has_content") else "⚠️"
-        emoji = l.get("emoji") or "📘"
-        title = l.get("title") or "Untitled"
+    for lesson in lessons:
+        l = _row_to_dict(lesson)
+
+        lid = _safe_get(l, "id")
+        status = "✅" if _safe_get(l, "has_content") else "⚠️"
+        emoji = _safe_get(l, "emoji", "📘") or "📘"
+        title = _safe_get(l, "title", "Untitled") or "Untitled"
+
+        if not lid:
+            continue
 
         btns.append([
             Btn(
                 f"{status} {emoji} {title}",
-                callback_data=f"al_{l['id']}",
+                callback_data=f"al_{lid}",
             )
         ])
+
+    if not btns:
+        btns.append([Btn("📂 No lessons yet", callback_data="a_main")])
 
     btns.append([
         Btn("⬅️ Back", callback_data="a_main")
@@ -215,9 +256,14 @@ def confirm(yes, no):
 def admin_links(lid, link_items):
     btns = []
 
-    for cid, label, url in link_items:
+    for item in link_items:
+        try:
+            cid, label, url = item
+        except Exception:
+            continue
+
         btns.append([
-            Btn(f"🔗 {label[:20]}", url=url),
+            Btn(f"🔗 {str(label)[:20]}", url=url),
             Btn("🗑 Delete", callback_data=f"alcd_{cid}"),
         ])
 
