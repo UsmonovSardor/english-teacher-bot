@@ -116,14 +116,16 @@ async def callback_route(update, context):
             pass
 
         if data in (
-            "student",
-            "admin",
-            "a_main",
-            "a_lessons",
-            "a_analytics",
-            "a_leaderboard",
-            "a_submissions",
-        ):
+    "student",
+    "admin",
+    "a_main",
+    "a_lessons",
+    "a_new",
+    "a_analytics",
+    "a_leaderboard",
+    "a_submissions",
+    "a_logout",
+):
             _clear_admin_states(context)
 
         elif data.startswith(("al_", "aec_", "acat_", "alc_")):
