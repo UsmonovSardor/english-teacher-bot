@@ -330,6 +330,36 @@ async def text_msg(update, context):
         return
 
     try:
+        if context.user_data.get("waiting_login_pass"):
+            from bot.handlers.admin.auth import process_password
+            await process_password(update, context)
+            return
+
+        if context.user_data.get("waiting_login_user"):
+            from bot.handlers.admin.auth import process_username
+            await process_username(update, context)
+            return
+
+        if context.user_data.get("waiting_new_lesson"):
+            from bot.handlers.admin.lessons import new_lesson_save
+            await new_lesson_save(update, context)
+            return
+
+        if context.user_data.get("rename_lid"):
+            from bot.handlers.admin.lessons import rename_lesson
+            await rename_lesson(update, context)
+            return
+
+        if context.user_data.get("add_link_lid"):
+            from bot.handlers.admin.links_mgr import save_link
+            await save_link(update, context)
+            return
+
+        if context.user_data.get("edit_cid") or context.user_data.get("add_content"):
+            from bot.handlers.admin.content import save_content
+            await save_content(update, context)
+            return
+
         from bot.handlers.student.register import handle_registration_text
         if await handle_registration_text(update, context):
             return
@@ -337,30 +367,6 @@ async def text_msg(update, context):
         from bot.handlers.student.content import handle_task_answer
         if await handle_task_answer(update, context):
             return
-
-        if context.user_data.get("waiting_login_pass"):
-            from bot.handlers.admin.auth import process_password
-            await process_password(update, context)
-
-        elif context.user_data.get("waiting_login_user"):
-            from bot.handlers.admin.auth import process_username
-            await process_username(update, context)
-
-        elif context.user_data.get("waiting_new_lesson"):
-            from bot.handlers.admin.lessons import new_lesson_save
-            await new_lesson_save(update, context)
-
-        elif context.user_data.get("rename_lid"):
-            from bot.handlers.admin.lessons import rename_lesson
-            await rename_lesson(update, context)
-
-        elif context.user_data.get("add_link_lid"):
-            from bot.handlers.admin.links_mgr import save_link
-            await save_link(update, context)
-
-        elif context.user_data.get("edit_cid") or context.user_data.get("add_content"):
-            from bot.handlers.admin.content import save_content
-            await save_content(update, context)
 
     except Exception as e:
         logger.exception("text_msg: %s", e)
